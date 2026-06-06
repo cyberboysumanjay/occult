@@ -1,0 +1,5 @@
+# Cloudflare Pages config for occult — a static, build-less site.
+# `wrangler pages deploy` reads name + output dir from here.
+name = "occult"
+pages_build_output_dir = "."
+compatibility_date = "2026-06-06"
