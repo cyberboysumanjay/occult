@@ -17,7 +17,7 @@
 //   'error'     Error
 
 import { createEmitter } from '../util/events.js';
-import { SCALE_SERVICE, MEASUREMENT_CHAR, NAME_PREFIXES } from './uuids.js';
+import { SCALE_SERVICE_UUID, MEASUREMENT_CHAR_UUID, NAME_PREFIXES } from './uuids.js';
 import { parseCultFrame } from './parser.js';
 
 const WEIGHT_LOCK_FRAMES = 3;      // identical weight frames → weight locked
@@ -46,17 +46,19 @@ export class CultScaleClient {
     this.#reset();
     this.#emit('state', 'connecting');
     try {
+      // Bluefy (WebKit) rejects 16-bit UUIDs given as integers ("request payload
+      // unknown"), so we use full 128-bit UUID strings everywhere. Chrome accepts both.
       const nameFilters = NAME_PREFIXES.map((p) => ({ namePrefix: p }));
       this.#device = await navigator.bluetooth.requestDevice({
-        filters: [...nameFilters, { services: [SCALE_SERVICE] }],
-        optionalServices: [SCALE_SERVICE],
+        filters: [...nameFilters, { services: [SCALE_SERVICE_UUID] }],
+        optionalServices: [SCALE_SERVICE_UUID],
       });
       this.#onDisconnect = () => this.#handleDisconnect();
       this.#device.addEventListener('gattserverdisconnected', this.#onDisconnect);
 
       this.#server = await this.#device.gatt.connect();
-      const service = await this.#server.getPrimaryService(SCALE_SERVICE);
-      this.#char = await service.getCharacteristic(MEASUREMENT_CHAR);
+      const service = await this.#server.getPrimaryService(SCALE_SERVICE_UUID);
+      this.#char = await service.getCharacteristic(MEASUREMENT_CHAR_UUID);
       this.#char.addEventListener('characteristicvaluechanged', (e) => this.#handleFrame(e.target.value));
       await this.#char.startNotifications();
 
