@@ -1,0 +1,10 @@
+{
+  "name": "occult · Smart Scale",
+  "short_name": "occult",
+  "description": "Read your Cult Smart Scale over Bluetooth. Fully local, no cloud.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0a0b0d",
+  "theme_color": "#0a0b0d",
+  "orientation": "portrait"
+}

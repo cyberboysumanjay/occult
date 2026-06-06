@@ -1,0 +1,13 @@
+.DS_Store
+Thumbs.db
+*.log
+_*.mjs
+.vscode/
+.idea/
+node_modules/
+
+# Reference material kept locally, NOT part of this repo.
+# openScale (GPLv3) — used only as a protocol reference:
+openscale/
+# headless QA scratch dir:
+occult-qa/

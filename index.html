@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0b0d" />
+  <title>occult · Smart Scale</title>
+  <meta name="description" content="Read your smart scale over Bluetooth. Fully local, no cloud." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <!-- Apply saved theme before first paint to avoid a flash. -->
+  <script>try{if(localStorage.getItem('occult-theme')==='light')document.documentElement.dataset.theme='light';}catch(e){}</script>
+
+  <!-- Distinctive type: an elegant grimoire serif + a technical mono. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- film grain + vignette atmosphere -->
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <!-- ───────────────── top bar ───────────────── -->
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+        <circle cx="24" cy="24" r="21" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.9"/>
+        <circle cx="24" cy="24" r="14" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.5"/>
+        <path d="M24 6 L41 36 L7 36 Z" fill="none" stroke="currentColor" stroke-width="1.1"/>
+        <circle cx="24" cy="24" r="2.4" fill="currentColor"/>
+      </svg>
+      <div class="brand-text">
+        <h1>occult</h1>
+        <span class="brand-tag">Smart&nbsp;Scale</span>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="profile-switcher" id="profileChips"><!-- chips injected --></div>
+      <button class="btn btn-ghost icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">☾</button>
+      <button class="btn btn-ghost icon-btn" id="manualBtn" title="Manual entry" aria-label="Manual entry">＋</button>
+      <button class="btn btn-primary" id="connectBtn">
+        <span class="dot" id="connDot"></span><span id="connLabel">Measure</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ───────────────── tabs ───────────────── -->
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-tab="today">Today</button>
+    <button class="tab" data-tab="trends">Trends</button>
+    <button class="tab" data-tab="history">History</button>
+    <button class="tab" data-tab="profiles">Profiles</button>
+    <span class="tab-underline" id="tabUnderline" aria-hidden="true"></span>
+  </nav>
+
+  <main class="stage">
+    <!-- TODAY -->
+    <section class="tab-panel is-active" id="tab-today">
+      <div class="hero" id="todayHero"><!-- injected --></div>
+      <div class="card-grid" id="todayGrid"><!-- cards injected --></div>
+    </section>
+
+    <!-- TRENDS -->
+    <section class="tab-panel" id="tab-trends">
+      <div class="trends-grid" id="trendsGrid"><!-- chart cards injected --></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section class="tab-panel" id="tab-history">
+      <div class="toolbar">
+        <h2 class="panel-title">Ledger</h2>
+        <div class="toolbar-actions">
+          <button class="btn btn-ghost" id="exportCsvBtn">Export CSV</button>
+          <button class="btn btn-ghost" id="exportJsonBtn">Export JSON</button>
+          <button class="btn btn-ghost" id="importBtn">Import</button>
+          <input type="file" id="importFile" accept="application/json" hidden />
+        </div>
+      </div>
+      <div class="ledger-wrap" id="historyWrap"><!-- table injected --></div>
+    </section>
+
+    <!-- PROFILES -->
+    <section class="tab-panel" id="tab-profiles">
+      <div class="toolbar">
+        <h2 class="panel-title">Profiles</h2>
+        <button class="btn btn-primary" id="addProfileBtn">＋ New profile</button>
+      </div>
+      <div class="profiles-grid" id="profilesGrid"><!-- profile cards injected --></div>
+    </section>
+  </main>
+
+  <!-- ───────────────── connect / weighing overlay ───────────────── -->
+  <div class="overlay" id="connectOverlay" hidden>
+    <div class="weigh-card">
+      <button class="overlay-close" id="connectClose" aria-label="Close">✕</button>
+      <p class="weigh-status" id="weighStatus">Tap the scale to wake it, then step on…</p>
+      <div class="weigh-readout">
+        <span class="weigh-value" id="weighWeight">0.0</span>
+        <span class="weigh-unit">kg</span>
+      </div>
+      <div class="weigh-pulse" id="weighHr" hidden>
+        <span class="heart">♥</span><span id="weighHrVal">—</span><span class="hr-unit">bpm</span>
+      </div>
+      <div class="weigh-ring"><div class="weigh-ring-fill" id="weighRing"></div></div>
+      <p class="weigh-hint">Stay still — body composition reads a few seconds after the weight locks.</p>
+    </div>
+  </div>
+
+  <!-- ───────────────── profile modal ───────────────── -->
+  <div class="modal-scrim" id="profileModal" hidden>
+    <form class="modal" id="profileForm">
+      <h3 id="profileModalTitle">New profile</h3>
+      <label>Name<input type="text" id="pf_name" required maxlength="40" placeholder="e.g. Alex" /></label>
+      <div class="form-row">
+        <label>Sex
+          <select id="pf_sex">
+            <option value="male">male</option>
+            <option value="female">female</option>
+          </select>
+        </label>
+        <label>Age<input type="number" id="pf_age" min="1" max="120" placeholder="30" /></label>
+      </div>
+      <label>Height (cm)<input type="number" id="pf_heightCm" min="80" max="250" step="0.1" placeholder="170" /></label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="profileCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ───────────────── manual entry modal ───────────────── -->
+  <div class="modal-scrim" id="manualModal" hidden>
+    <form class="modal" id="manualForm">
+      <h3>Manual weigh-in</h3>
+      <label>Weight (kg)<input type="number" id="mn_weight" min="2" max="400" step="0.1" required placeholder="75.0" /></label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="manualCancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save reading</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <!-- Chart.js (vendored, classic script → global `Chart`) then the app module. -->
+  <script src="vendor/chart.umd.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
