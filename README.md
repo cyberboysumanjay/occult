@@ -99,6 +99,18 @@ occult/
 └── research/     reverse-engineered protocol notes
 ```
 
+## Credits & references
+
+- **[openScale](https://github.com/oliexdev/openScale)** (GPLv3) — the open-source
+  BLE-scale project. Its `CultSmartScaleProHandler`, `OneByoneHandler` /
+  `OneByoneLib`, and `StandardImpedanceLib` were invaluable for decoding the
+  protocol family and the body-composition formulas (and for confirming the
+  encrypted `0xDF` body-comp packet is not reverse-engineerable).
+- **[whoof](https://github.com/madhursatija/whoof)** — an independent, local-first
+  Web Bluetooth client for the WHOOP 4.0 strap. Its architecture (vanilla-JS
+  modules, IndexedDB, cache-first PWA, on-device metrics) was the blueprint for
+  occult's "own your data, no cloud" design.
+
 ## License
 
 MIT. Product names are trademarks of their respective owners; this project is
