@@ -8,6 +8,11 @@
   <meta name="description" content="Read your smart scale over Bluetooth. Fully local, no cloud." />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <!-- iOS "Add to Home Screen" (Safari ignores the manifest's install prompt). -->
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="occult" />
   <!-- Apply saved theme before first paint to avoid a flash. -->
   <script>try{if(localStorage.getItem('occult-theme')==='light')document.documentElement.dataset.theme='light';}catch(e){}</script>
 
