@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/fogleman/gg"
@@ -90,41 +91,39 @@ func RenderCard(d CardData) ([]byte, error) {
 
 	const padX = 56
 
-	// ── Header: profile name + timestamp ───────────────────────────────────
-	dc.SetFontFace(face(fontBold, 28))
-	dc.SetHexColor(colText)
+	// ── Header: profile name + a prominent, readable date ───────────────────
 	name := d.ProfileName
 	if name == "" {
 		name = "occult"
 	}
-	dc.DrawString(name, padX, 86)
+	dc.SetFontFace(face(fontBold, 28))
+	dc.SetHexColor(colText)
+	dc.DrawString(name, padX, 84)
 
-	dc.SetFontFace(face(fontRegular, 18))
-	dc.SetHexColor(colMuted)
-	dateStr := d.Ts.Local().Format("Mon 02 Jan 2006 · 15:04")
-	dw, _ := dc.MeasureString(dateStr)
-	dc.DrawString(dateStr, cardW-padX-dw, 84)
+	dc.SetFontFace(face(fontRegular, 24))
+	dc.SetHexColor(colText)
+	dc.DrawString(d.Ts.Local().Format("Mon 02 Jan · 15:04"), padX, 126)
 
-	// ── Hero weight ─────────────────────────────────────────────────────────
-	dc.SetFontFace(face(fontBold, 118))
+	// ── Hero weight (the strong focal point — gold on dark) ─────────────────
+	dc.SetFontFace(face(fontBold, 120))
 	dc.SetHexColor(colGold)
 	weightStr := fmt.Sprintf("%.1f", d.WeightKg)
-	dc.DrawString(weightStr, padX, 230)
+	dc.DrawString(weightStr, padX, 252)
 	ww, _ := dc.MeasureString(weightStr)
 	dc.SetFontFace(face(fontRegular, 40))
 	dc.SetHexColor(colMuted)
-	dc.DrawString("kg", padX+ww+18, 230)
+	dc.DrawString("kg", padX+ww+18, 252)
 
-	// ── Secondary metrics line ──────────────────────────────────────────────
+	// ── Secondary metrics line (no BMI class — number alone) ────────────────
 	dc.SetFontFace(face(fontRegular, 22))
 	dc.SetHexColor(colText)
-	dc.DrawString(metricsLine(d), padX, 286)
+	dc.DrawString(cardMetricsLine(d), padX, 306)
 
 	// ── Sparkline (recent weights) ──────────────────────────────────────────
-	drawSparkline(dc, d.Spark, padX, 322, cardW-2*padX, 120)
+	drawSparkline(dc, d.Spark, padX, 340, cardW-2*padX, 114)
 
-	// ── Delta chips ─────────────────────────────────────────────────────────
-	drawDeltas(dc, d.Deltas, padX, 470, cardW-2*padX, 110)
+	// ── Trend ───────────────────────────────────────────────────────────────
+	drawDeltas(dc, d.Deltas, padX, 478, cardW-2*padX, 110)
 
 	var buf bytes.Buffer
 	if err := dc.EncodePNG(&buf); err != nil {
@@ -133,28 +132,57 @@ func RenderCard(d CardData) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func metricsLine(d CardData) string {
+// cardMetricsLine is the single secondary line on the card. No BMI class label
+// (the number alone is enough, and the class reads as a daily judgement); BMR
+// gets thousands separators.
+func cardMetricsLine(d CardData) string {
 	parts := []string{}
-	if d.BMI != nil {
-		s := fmt.Sprintf("BMI %.1f", *d.BMI)
-		if d.BMIClass != "" {
-			s += " (" + d.BMIClass + ")"
-		}
-		parts = append(parts, s)
-	}
 	if d.BodyFatPct != nil {
 		parts = append(parts, fmt.Sprintf("Fat %.1f%%", *d.BodyFatPct))
 	}
-	if d.BMRKcal != nil {
-		parts = append(parts, fmt.Sprintf("BMR %d kcal", *d.BMRKcal))
-	}
 	if d.BodyWaterPct != nil {
 		parts = append(parts, fmt.Sprintf("Water %.1f%%", *d.BodyWaterPct))
+	}
+	if d.BMRKcal != nil {
+		parts = append(parts, fmt.Sprintf("BMR %s kcal", commaInt(*d.BMRKcal)))
+	}
+	if d.BMI != nil {
+		parts = append(parts, fmt.Sprintf("BMI %.1f", *d.BMI))
 	}
 	if d.HeartRate != nil {
 		parts = append(parts, fmt.Sprintf("HR %d bpm", *d.HeartRate))
 	}
 	return join(parts, "   ·   ")
+}
+
+// commaInt formats an integer with thousands separators (1961 → "1,961").
+func commaInt(n int) string {
+	s := strconv.Itoa(n)
+	neg := false
+	if len(s) > 0 && s[0] == '-' {
+		neg, s = true, s[1:]
+	}
+	var out []byte
+	for i := 0; i < len(s); i++ {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, s[i])
+	}
+	if neg {
+		return "-" + string(out)
+	}
+	return string(out)
+}
+
+// anyAvailable reports whether at least one delta has a baseline.
+func anyAvailable(ds []DeltaView) bool {
+	for _, d := range ds {
+		if d.Available {
+			return true
+		}
+	}
+	return false
 }
 
 func drawSparkline(dc *gg.Context, vals []float64, x, y, w, h float64) {
@@ -206,38 +234,45 @@ func drawSparkline(dc *gg.Context, vals []float64, x, y, w, h float64) {
 }
 
 func drawDeltas(dc *gg.Context, deltas []DeltaView, x, y, w, h float64) {
-	if len(deltas) == 0 {
+	// All-empty (e.g. the very first reading) → one tidy line, not a row of
+	// dashes that reads like a rendering bug.
+	if !anyAvailable(deltas) {
+		dc.SetFontFace(face(fontRegular, 24))
+		dc.SetHexColor(colMuted)
+		dc.DrawStringAnchored("No trend data yet", x+w/2, y+h/2, 0.5, 0.5)
 		return
 	}
 	cw := w / float64(len(deltas))
 	for i, dv := range deltas {
 		cx := x + cw*float64(i) + cw/2
 
-		// Label.
 		dc.SetFontFace(face(fontRegular, 17))
 		dc.SetHexColor(colMuted)
 		dc.DrawStringAnchored(dv.Label, cx, y+14, 0.5, 0.5)
 
-		// Value with arrow + colour.
-		dc.SetFontFace(face(fontBold, 30))
-		arrow, txt, col := deltaParts(dv)
+		if !dv.Available {
+			dc.SetFontFace(face(fontRegular, 16))
+			dc.SetHexColor(colMuted)
+			dc.DrawStringAnchored("no data", cx, y+56, 0.5, 0.5)
+			continue
+		}
+		// Sign + colour convey direction (the embedded font has no arrow glyphs).
+		txt, col := cardDelta(dv.DeltaKg)
+		dc.SetFontFace(face(fontBold, 28))
 		dc.SetHexColor(col)
-		dc.DrawStringAnchored(arrow+txt, cx, y+58, 0.5, 0.5)
+		dc.DrawStringAnchored(txt, cx, y+56, 0.5, 0.5)
 	}
 }
 
-// deltaParts returns the arrow glyph, value text and colour for a chip.
-func deltaParts(dv DeltaView) (arrow, txt, col string) {
-	if !dv.Available {
-		return "", "—", colMuted
-	}
+// cardDelta returns the value text and colour for a chip (green=down, red=up).
+func cardDelta(d float64) (txt, col string) {
 	switch {
-	case dv.DeltaKg > 0.0005:
-		return "▲ ", fmt.Sprintf("+%.2f", dv.DeltaKg), colUp
-	case dv.DeltaKg < -0.0005:
-		return "▼ ", fmt.Sprintf("%.2f", dv.DeltaKg), colDown // already has '-'
+	case d > 0.005:
+		return fmt.Sprintf("+%.2f", d), colUp
+	case d < -0.005:
+		return fmt.Sprintf("%.2f", d), colDown // negative sign included
 	default:
-		return "▬ ", "0.00", colMuted
+		return "0.00", colMuted
 	}
 }
 

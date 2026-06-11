@@ -5,7 +5,6 @@ package telegram
 import (
 	"bytes"
 	"fmt"
-	"html"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -107,33 +106,76 @@ func (n *Notifier) sendPhoto(png []byte, caption string) error {
 	return nil
 }
 
-// Caption builds the HTML caption (Telegram limit is 1024 chars; this stays well
-// under). Arrows convey direction; HTML <b> highlights the headline.
+// Caption builds the Telegram message caption (HTML parse_mode; 1024-char limit).
+// Emojis render natively in Telegram — unlike the card image, whose font has no
+// emoji glyphs. Layout:
+//
+//	⚖️ 101.1 kg · Fri 12 Jun, 03:59
+//
+//	🫀 HR 91 bpm   🔥 BMR 1,961 kcal
+//	💧 Water 52.0%   🫀 Fat 30.8%   BMI 34.2
+//
+//	📈 Trend
+//	  vs last   → 0.00 kg
+//	  1 day     no prior data
 func Caption(d CardData) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "⚖️ <b>%.1f kg</b>", d.WeightKg)
-	if d.ProfileName != "" {
-		fmt.Fprintf(&b, " — %s", html.EscapeString(d.ProfileName))
-	}
-	b.WriteString("\n")
-	b.WriteString(html.EscapeString(d.Ts.Local().Format("Mon 02 Jan 2006 · 15:04")))
-	b.WriteString("\n")
 
-	if line := metricsLine(d); line != "" {
-		fmt.Fprintf(&b, "\n<i>%s</i>\n", html.EscapeString(line))
+	fmt.Fprintf(&b, "⚖️ <b>%.1f kg</b> · %s\n",
+		d.WeightKg, d.Ts.Local().Format("Mon 02 Jan, 15:04"))
+
+	// Metrics over up to two lines — only what's present.
+	var l1, l2 []string
+	if d.HeartRate != nil {
+		l1 = append(l1, fmt.Sprintf("🫀 HR %d bpm", *d.HeartRate))
+	}
+	if d.BMRKcal != nil {
+		l1 = append(l1, fmt.Sprintf("🔥 BMR %s kcal", commaInt(*d.BMRKcal)))
+	}
+	if d.BodyWaterPct != nil {
+		l2 = append(l2, fmt.Sprintf("💧 Water %.1f%%", *d.BodyWaterPct))
+	}
+	if d.BodyFatPct != nil {
+		l2 = append(l2, fmt.Sprintf("🫀 Fat %.1f%%", *d.BodyFatPct))
+	}
+	if d.BMI != nil {
+		l2 = append(l2, fmt.Sprintf("BMI %.1f", *d.BMI))
+	}
+	if len(l1) > 0 || len(l2) > 0 {
+		b.WriteString("\n")
+		if len(l1) > 0 {
+			b.WriteString(join(l1, "   ") + "\n")
+		}
+		if len(l2) > 0 {
+			b.WriteString(join(l2, "   ") + "\n")
+		}
 	}
 
-	if len(d.Deltas) > 0 {
-		b.WriteString("\n<b>Trend</b>\n<pre>")
+	b.WriteString("\n📈 <b>Trend</b>\n")
+	if anyAvailable(d.Deltas) {
+		b.WriteString("<pre>")
 		for _, dv := range d.Deltas {
 			if !dv.Available {
-				fmt.Fprintf(&b, "%-9s   —\n", dv.Label+":")
+				fmt.Fprintf(&b, "  %-8s no prior data\n", dv.Label)
 				continue
 			}
-			arrow, txt, _ := deltaParts(dv)
-			fmt.Fprintf(&b, "%-9s %s%s kg\n", dv.Label+":", arrow, txt)
+			fmt.Fprintf(&b, "  %-8s %s\n", dv.Label, captionDelta(dv.DeltaKg))
 		}
 		b.WriteString("</pre>")
+	} else {
+		b.WriteString("No trend data yet")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// captionDelta formats a weight delta for the caption: arrow + magnitude.
+func captionDelta(d float64) string {
+	switch {
+	case d > 0.005:
+		return fmt.Sprintf("▲ %.2f kg", d)
+	case d < -0.005:
+		return fmt.Sprintf("▼ %.2f kg", -d)
+	default:
+		return "→ 0.00 kg"
+	}
 }
