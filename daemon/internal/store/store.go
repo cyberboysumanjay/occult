@@ -10,7 +10,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	"occultd/internal/bodycomp"
 	"occultd/internal/settings"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
@@ -235,6 +237,52 @@ func (s *Store) GetSettings() (settings.Settings, error) {
 	}
 	cfg.Normalize()
 	return cfg, nil
+}
+
+// RederiveAll recomputes the body-comp snapshot for every reading from the given
+// profile. Called after the profile is saved/changed so existing readings (e.g.
+// ones captured before onboarding) pick up BMI/body-fat/etc. With no usable
+// height the derived columns are cleared to NULL.
+func (s *Store) RederiveAll(p settings.Profile) error {
+	readings, err := s.List("")
+	if err != nil {
+		return err
+	}
+	age := 0
+	if p.BirthYear > 0 {
+		age = time.Now().Year() - p.BirthYear
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		UPDATE readings SET
+			bmi=?, bmi_class=?, body_fat_pct=?, fat_mass_kg=?, ffm_kg=?,
+			tbw_l=?, body_water_pct=?, bmr_kcal=?, smm_kg=?, smm_pct=?
+		WHERE id=?`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, r := range readings {
+		if p.HeightCm > 0 && r.WeightKg > 0 {
+			d := bodycomp.Compose(bodycomp.Profile{Age: age, Sex: p.Sex, HeightCm: p.HeightCm}, r.WeightKg)
+			if _, err := stmt.Exec(d.BMI, d.BMIClass, d.BodyFatPct, d.FatMassKg, d.FFMKg,
+				d.TBWL, d.BodyWaterPct, d.BMRKcal, d.SMMKg, d.SMMPct, r.ID); err != nil {
+				return err
+			}
+		} else {
+			if _, err := stmt.Exec(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, r.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
 }
 
 // SaveSettings normalizes and upserts the settings document.

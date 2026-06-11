@@ -4,8 +4,8 @@ import "testing"
 
 func TestNormalize_DerivesFlags(t *testing.T) {
 	s := Defaults()
-	s.Profile.Name = "Ansuman"
-	s.Profile.HeightCm = 178
+	s.Profile.Name = "Test"
+	s.Profile.HeightCm = 175
 	s.Telegram.BotToken = "tok"
 	s.Telegram.ChatID = "123"
 	s.Normalize()
@@ -20,7 +20,7 @@ func TestNormalize_DerivesFlags(t *testing.T) {
 
 func TestNormalize_NotOnboardedWithoutHeight(t *testing.T) {
 	s := Defaults()
-	s.Profile.Name = "Ansuman" // no height
+	s.Profile.Name = "Test" // no height
 	s.Normalize()
 	if s.Onboarded {
 		t.Error("missing height should not be onboarded")

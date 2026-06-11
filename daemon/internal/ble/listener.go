@@ -30,12 +30,14 @@ var (
 	measurementChar = bluetooth.New16BitUUID(0xFFF4) // notify: 11-byte frames
 )
 
-// Timing for a single capture. PostLockTimeout is the hard guarantee: once the
-// weight locks, we finalise within this window even if the body phase never
-// converges and no disconnect event arrives.
+// Timing for a single capture. Once the weight locks, we finalise IdleAfterLock
+// after the LAST frame — so when the scale stops streaming (it doesn't send a
+// clean BLE disconnect on power-off) we save promptly with whatever HR/impedance
+// was captured, instead of waiting a flat timeout. OverallTimeout is the absolute
+// cap on one capture.
 const (
-	PostLockTimeout = 30 * time.Second // after weight locks → force-complete
-	OverallTimeout  = 90 * time.Second // never locked within this → give up
+	IdleAfterLock  = 6 * time.Second  // finalise this long after the last frame post-lock
+	OverallTimeout = 90 * time.Second // absolute cap on a single capture
 )
 
 // Options configures how the listener recognises and bounds a reading.
@@ -219,7 +221,7 @@ func (l *Listener) capture(ctx context.Context, addr bluetooth.Address) (*protoc
 
 	sess := protocol.NewSession()
 	var sessMu sync.Mutex // Session is touched from the notify goroutine AND here
-	lockCh := make(chan struct{}, 1)
+	activityCh := make(chan struct{}, 1) // a post-lock frame arrived (locked or measuring)
 	doneCh := make(chan protocol.Complete, 1)
 
 	err = chars[0].EnableNotifications(func(buf []byte) {
@@ -230,12 +232,14 @@ func (l *Listener) capture(ctx context.Context, addr bluetooth.Address) (*protoc
 			switch up.Kind {
 			case "locked":
 				log.Printf("weight locked: %.2f kg — reading HR / body composition…", up.WeightKg)
-				select {
-				case lockCh <- struct{}{}:
-				default:
-				}
 			case "measuring":
 				log.Printf("measuring… hr=%d imp=%v tick=%d", up.HeartRate, up.HasImpedance, up.Ticks)
+			}
+			if up.Kind == "locked" || up.Kind == "measuring" {
+				select {
+				case activityCh <- struct{}{}:
+				default:
+				}
 			}
 		}
 		if done != nil {
@@ -257,7 +261,11 @@ func (l *Listener) capture(ctx context.Context, addr bluetooth.Address) (*protoc
 
 	overall := time.NewTimer(OverallTimeout)
 	defer overall.Stop()
-	var lockC <-chan time.Time // nil until the weight locks
+	// idle finalises IdleAfterLock after the last post-lock frame; dormant until
+	// the first activity arms it.
+	idle := time.NewTimer(time.Hour)
+	idle.Stop()
+	defer idle.Stop()
 
 	for {
 		select {
@@ -267,16 +275,20 @@ func (l *Listener) capture(ctx context.Context, addr bluetooth.Address) (*protoc
 		case c := <-doneCh:
 			return &c, nil
 
-		case <-lockCh:
-			t := time.NewTimer(PostLockTimeout)
-			defer t.Stop()
-			lockC = t.C
+		case <-activityCh:
+			if !idle.Stop() {
+				select {
+				case <-idle.C:
+				default:
+				}
+			}
+			idle.Reset(IdleAfterLock)
 
-		case <-lockC:
-			return finalize("timeout"), nil
+		case <-idle.C:
+			// Frames stopped after a lock → the weigh-in is done.
+			return finalize("idle"), nil
 
 		case <-overall.C:
-			// Either finalise a locked-but-unconverged reading, or give up.
 			return finalize("timeout"), nil
 
 		case <-disconnectCh:

@@ -8,3 +8,6 @@ config.toml
 *.db
 *.db-wal
 *.db-shm
+
+# OMC tooling state
+.omc/

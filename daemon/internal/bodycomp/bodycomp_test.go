@@ -41,7 +41,7 @@ func TestBMIClass(t *testing.T) {
 }
 
 func TestCompose_NoImpedance(t *testing.T) {
-	d := Compose(Profile{Age: 30, Sex: "male", HeightCm: 178}, 75)
+	d := Compose(Profile{Age: 30, Sex: "male", HeightCm: 175}, 75)
 	if d.BMI <= 0 || d.BMRKcal <= 0 || d.BodyFatPct <= 0 {
 		t.Errorf("expected populated anthropometrics, got %+v", d)
 	}

@@ -1,35 +1,38 @@
 /* occultd dashboard — app.js
    Vanilla JS, no build step. Requires Chart.js 4 loaded before this script.
-   Polls /api/profile, /api/latest, /api/readings every 30 seconds.           */
+   Polls /api/profile and /api/readings every 30 seconds.
+   Tab structure: Today | Trends | History                                   */
 
 'use strict';
 
 // ── constants ────────────────────────────────────────────────────────────────
-const REFRESH_MS   = 30_000;
-const MAX_CHART_PTS = 90;   // show last N readings on the weight trend
+const REFRESH_MS    = 30_000;
+const SPARK_PTS     = 16;    // sparkline uses last N readings
 const API = {
   profile:  './api/profile',
-  latest:   './api/latest',
   readings: './api/readings',
   settings: './api/settings',
   tgTest:   './api/telegram/test',
 };
 
 // ── state ─────────────────────────────────────────────────────────────────────
-let weightChart   = null;   // Chart.js instance
-let lastRefreshTs = null;
+let cachedReadings = [];
+let activeTab      = 'today';
 
-// ── DOM refs (populated in init) ──────────────────────────────────────────────
+// Chart instance registry keyed by canvas id string (destroy-before-redraw)
+const chartRegistry = {};
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
 // ── number formatters ─────────────────────────────────────────────────────────
-const fmtKg  = v => v != null ? (+v).toFixed(1) : null;
-const fmtPct = v => v != null ? (+v).toFixed(1) : null;
-const fmtInt = v => v != null ? Math.round(+v).toString() : null;
-const fmtBmi = v => v != null ? (+v).toFixed(1) : null;
+const fmtKg    = v => v != null ? (+v).toFixed(1) : null;
+const fmtPct   = v => v != null ? (+v).toFixed(1) : null;
+const fmtNum1  = v => v != null ? (+v).toFixed(1) : '—';
+const fmtInt   = v => v != null ? Math.round(+v).toString() : '—';
 
-/** Format ISO timestamp to human-readable local string */
-function fmtDate(iso) {
+/** Format ISO timestamp → "Jun 12, 2025, 09:41" */
+function fmtDateTime(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
   return d.toLocaleString(undefined, {
@@ -38,18 +41,38 @@ function fmtDate(iso) {
   });
 }
 
-/** Short date for the chart X-axis labels */
+/** Format ISO timestamp → "Jun 12" short form for sparkline labels */
 function fmtShortDate(iso) {
+  if (!iso) return '';
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-// ── BMI class → CSS token + display label ─────────────────────────────────────
-// The API sends WHO labels like "obese (class I)"; the colour token is the first
-// word ("obese") so every obese subclass still gets its badge colour.
-function bmiInfo(cls) {
-  if (!cls) return { token: '', label: '' };
-  return { token: cls.split(' ')[0], label: cls };
+/** Relative time: "3 h ago", "2 d ago", "just now" */
+function fmtRelative(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins  = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days  = Math.floor(diff / 86400000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  if (hours < 24) return `${hours} h ago`;
+  return `${days} d ago`;
+}
+
+// ── BMI class → token for badge styling ──────────────────────────────────────
+function bmiToken(cls) {
+  if (!cls) return '';
+  return cls.split(' ')[0]; // e.g. "overweight" from "overweight"
+}
+
+function bmiTagClass(bmi) {
+  if (bmi == null) return '';
+  if (bmi < 18.5) return 'warn';
+  if (bmi < 25)   return 'good';
+  if (bmi < 30)   return 'warn';
+  return 'bad';
 }
 
 // ── safe fetch wrapper ────────────────────────────────────────────────────────
@@ -66,60 +89,37 @@ async function apiPost(url, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
-  // Always parse JSON; caller must check .ok
   return r.json();
 }
 
 // ── field helpers shared between onboarding and settings ─────────────────────
-
-/** Convert birthYear stored on server → display age */
 function birthYearToAge(birthYear) {
   return new Date().getFullYear() - birthYear;
 }
-
-/** Convert user-entered age → birthYear for POST */
 function ageToBirthYear(age) {
   return new Date().getFullYear() - age;
 }
-
-/**
- * Validate the three required profile fields.
- * Returns an error string, or '' if valid.
- */
 function validateProfile(name, age, heightCm) {
   if (!name || !name.trim()) return 'Name is required.';
   if (!age || Number(age) <= 0 || isNaN(Number(age))) return 'A valid age is required.';
   if (!heightCm || Number(heightCm) <= 0 || isNaN(Number(heightCm))) return 'A valid height is required.';
   return '';
 }
-
-/**
- * Build the body object for POST /api/settings.
- * All numeric fields are coerced with Number(); namePrefixes parsed from CSV.
- */
 function buildSettingsBody(fields) {
   const {
     name, sex, age, heightCm,
     botToken, chatId,
     namePrefixes, rssiThreshold, minWeightKg, maxWeightKg, cooldownSeconds,
   } = fields;
-
   const prefixes = (namePrefixes || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
-
+    .split(',').map(s => s.trim()).filter(Boolean);
   return {
     profile: {
-      name: name.trim(),
-      sex,
+      name: name.trim(), sex,
       birthYear: ageToBirthYear(Number(age)),
       heightCm:  Number(heightCm),
     },
-    telegram: {
-      botToken: botToken || '',
-      chatId:   chatId   || '',
-    },
+    telegram: { botToken: botToken || '', chatId: chatId || '' },
     scale: {
       namePrefixes:    prefixes.length ? prefixes : ['Cult', 'CULT'],
       rssiThreshold:   Number(rssiThreshold),
@@ -131,25 +131,15 @@ function buildSettingsBody(fields) {
 }
 
 // ── onboarding overlay ────────────────────────────────────────────────────────
-
-/**
- * Show the onboarding overlay and resolve the returned Promise when the user
- * successfully completes it.  Pre-fills Telegram if the server has values.
- */
 function showOnboarding(serverSettings) {
   return new Promise(resolve => {
-    const overlay = $('onboarding-overlay');
-    const form    = $('onboarding-form');
-    const errEl   = $('onboarding-error');
+    const overlay   = $('onboarding-overlay');
+    const form      = $('onboarding-form');
+    const errEl     = $('onboarding-error');
     const submitBtn = $('onboarding-submit');
 
-    // Pre-fill Telegram if already set (unlikely on first run, but safe)
-    if (serverSettings?.telegram?.botToken) {
-      $('ob-bot-token').value = serverSettings.telegram.botToken;
-    }
-    if (serverSettings?.telegram?.chatId) {
-      $('ob-chat-id').value = serverSettings.telegram.chatId;
-    }
+    if (serverSettings?.telegram?.botToken) $('ob-bot-token').value = serverSettings.telegram.botToken;
+    if (serverSettings?.telegram?.chatId)   $('ob-chat-id').value   = serverSettings.telegram.chatId;
 
     overlay.hidden = false;
     $('ob-name').focus();
@@ -166,28 +156,21 @@ function showOnboarding(serverSettings) {
       const chatId   = $('ob-chat-id').value.trim();
 
       const validErr = validateProfile(name, age, heightCm);
-      if (validErr) {
-        errEl.textContent = validErr;
-        errEl.hidden = false;
-        return;
-      }
+      if (validErr) { errEl.textContent = validErr; errEl.hidden = false; return; }
 
       submitBtn.disabled = true;
       submitBtn.textContent = '…';
 
       try {
-        // Use default scale values from server if available, else sensible fallback
         const sc = serverSettings?.scale || {};
         const body = buildSettingsBody({
-          name, sex, age, heightCm,
-          botToken, chatId,
+          name, sex, age, heightCm, botToken, chatId,
           namePrefixes:    (sc.namePrefixes || ['Cult', 'CULT']).join(','),
           rssiThreshold:   sc.rssiThreshold   ?? -80,
           minWeightKg:     sc.minWeightKg     ?? 5,
           maxWeightKg:     sc.maxWeightKg     ?? 300,
           cooldownSeconds: sc.cooldownSeconds ?? 20,
         });
-
         const res = await apiPost(API.settings, body);
         if (res.ok) {
           overlay.hidden = true;
@@ -209,19 +192,15 @@ function showOnboarding(serverSettings) {
 }
 
 // ── settings modal ────────────────────────────────────────────────────────────
-
-/** Open the settings modal and pre-fill all fields from server. */
 async function openSettings() {
-  const modal   = $('settings-modal');
-  const errEl   = $('settings-error');
-  const tgRes   = $('st-tg-result');
+  const modal = $('settings-modal');
+  const errEl = $('settings-error');
+  const tgRes = $('st-tg-result');
 
-  // Reset any stale state
   errEl.hidden = true;
   tgRes.textContent = '';
   tgRes.className = 'tg-result';
 
-  // Fetch current settings
   let s;
   try {
     s = await apiFetch(API.settings);
@@ -234,28 +213,22 @@ async function openSettings() {
   const tg = s.telegram || {};
   const sc = s.scale    || {};
 
-  // Fill profile
-  $('st-name').value   = p.name      || '';
-  $('st-sex').value    = p.sex       || 'male';
-  $('st-age').value    = p.birthYear ? birthYearToAge(p.birthYear) : '';
-  $('st-height').value = p.heightCm  || '';
-
-  // Fill telegram
+  $('st-name').value      = p.name      || '';
+  $('st-sex').value       = p.sex       || 'male';
+  $('st-age').value       = p.birthYear ? birthYearToAge(p.birthYear) : '';
+  $('st-height').value    = p.heightCm  || '';
   $('st-bot-token').value = tg.botToken || '';
   $('st-chat-id').value   = tg.chatId   || '';
-
-  // Fill advanced
-  $('st-prefixes').value = (sc.namePrefixes || []).join(', ');
-  $('st-rssi').value     = sc.rssiThreshold   ?? '';
-  $('st-min-kg').value   = sc.minWeightKg     ?? '';
-  $('st-max-kg').value   = sc.maxWeightKg     ?? '';
-  $('st-cooldown').value = sc.cooldownSeconds ?? '';
+  $('st-prefixes').value  = (sc.namePrefixes || []).join(', ');
+  $('st-rssi').value      = sc.rssiThreshold   ?? '';
+  $('st-min-kg').value    = sc.minWeightKg     ?? '';
+  $('st-max-kg').value    = sc.maxWeightKg     ?? '';
+  $('st-cooldown').value  = sc.cooldownSeconds ?? '';
 
   modal.hidden = false;
   $('st-name').focus();
 }
 
-/** Wire up the settings modal interactions (called once in init). */
 function initSettings() {
   const modal     = $('settings-modal');
   const form      = $('settings-form');
@@ -265,28 +238,19 @@ function initSettings() {
   const toast     = $('settings-toast');
   const saveBtn   = $('settings-save');
 
-  // Open via gear button
   $('settings-btn').addEventListener('click', openSettings);
 
-  // Close via X or Cancel
   const closeModal = () => { modal.hidden = true; };
   $('settings-close').addEventListener('click', closeModal);
   $('settings-cancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
 
-  // Close on backdrop click
-  modal.addEventListener('click', e => {
-    if (e.target === modal) closeModal();
-  });
-
-  // Telegram test button
   tgTestBtn.addEventListener('click', async () => {
     tgRes.textContent = '';
     tgRes.className = 'tg-result';
     tgTestBtn.disabled = true;
-
     const botToken = $('st-bot-token').value.trim();
     const chatId   = $('st-chat-id').value.trim();
-
     try {
       const res = await apiPost(API.tgTest, { botToken, chatId });
       if (res.ok) {
@@ -305,7 +269,6 @@ function initSettings() {
     }
   });
 
-  // Save
   form.addEventListener('submit', async e => {
     e.preventDefault();
     errEl.hidden = true;
@@ -316,14 +279,9 @@ function initSettings() {
     const heightCm = $('st-height').value;
 
     const validErr = validateProfile(name, age, heightCm);
-    if (validErr) {
-      errEl.textContent = validErr;
-      errEl.hidden = false;
-      return;
-    }
+    if (validErr) { errEl.textContent = validErr; errEl.hidden = false; return; }
 
     saveBtn.disabled = true;
-
     try {
       const body = buildSettingsBody({
         name, sex, age, heightCm,
@@ -335,7 +293,6 @@ function initSettings() {
         maxWeightKg:     $('st-max-kg').value,
         cooldownSeconds: $('st-cooldown').value,
       });
-
       const res = await apiPost(API.settings, body);
       if (res.ok) {
         modal.hidden = true;
@@ -355,7 +312,6 @@ function initSettings() {
   });
 }
 
-/** Briefly show a toast element, then hide it. */
 function showToast(el, message) {
   el.textContent = message;
   el.hidden = false;
@@ -364,11 +320,9 @@ function showToast(el, message) {
 
 // ── status dot / connecting banner ───────────────────────────────────────────
 function setStatus(state) {
-  // state: 'connecting' | 'live' | 'error'
   const dot    = $('live-dot');
   const text   = $('status-text');
   const banner = $('connecting-banner');
-
   dot.className = 'live-dot';
   if (state === 'live') {
     dot.classList.add('active');
@@ -384,36 +338,217 @@ function setStatus(state) {
   }
 }
 
-// ── render profile in header ──────────────────────────────────────────────────
+// ── render profile name in header ─────────────────────────────────────────────
 function renderProfile(profile) {
   const el = $('profile-name');
   if (el && profile?.name) el.textContent = profile.name;
 }
 
-// ── render hero card (latest reading) ────────────────────────────────────────
-function renderHero(reading) {
-  const hero = $('hero-card');
+// ── Chart helpers (mirrors charts.js from the PWA) ────────────────────────────
 
-  // Empty state
-  if (!reading || Object.keys(reading).length === 0) {
-    hero.innerHTML = `
+/** Apply Chart.js global defaults once. */
+function ensureChartTheme() {
+  if (!window.Chart) return;
+  Chart.defaults.font.family = "'IBM Plex Mono', ui-monospace, monospace";
+  Chart.defaults.font.size   = 10;
+  Chart.defaults.color       = '#7e786c';
+  Chart.defaults.borderColor = 'rgba(236,228,211,0.08)';
+  Chart.defaults.plugins.legend.display  = false;
+  Chart.defaults.animation.duration = 700;
+  Chart.defaults.maintainAspectRatio = false;
+}
+
+/** Destroy any previously registered chart on this canvas id, then store the new one. */
+function registerChart(id, instance) {
+  if (chartRegistry[id]) {
+    try { chartRegistry[id].destroy(); } catch (_) {}
+  }
+  chartRegistry[id] = instance;
+}
+
+/** Convert hex (#rrggbb) to rgba string. */
+function hexA(hex, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return `rgba(216,162,74,${a})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
+/** Gold gradient fill for line charts. */
+function goldGradient(ctx, color) {
+  const g = ctx.createLinearGradient(0, 0, 0, 200);
+  g.addColorStop(0, hexA(color, 0.28));
+  g.addColorStop(1, hexA(color, 0.0));
+  return g;
+}
+
+/**
+ * Draw a line chart on a canvas.
+ * @param {HTMLCanvasElement} canvas
+ * @param {object} opts  { id, labels, values, color, unit, spark }
+ */
+function lineChart(canvas, { id, labels, values, color = '#d8a24a', unit = '', spark = false }) {
+  if (!window.Chart || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const instance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: color,
+        backgroundColor: goldGradient(ctx, color),
+        borderWidth: 2,
+        fill: true,
+        tension: 0.35,
+        pointRadius: 0,
+        pointHoverRadius: spark ? 0 : 4,
+        pointHoverBackgroundColor: color,
+        pointBackgroundColor: color,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        tooltip: spark ? { enabled: false } : {
+          backgroundColor: '#0e1014',
+          borderColor: 'rgba(236,228,211,0.16)',
+          borderWidth: 1,
+          titleColor: '#bdb6a6',
+          bodyColor: '#ECE4D3',
+          padding: 10,
+          displayColors: false,
+          callbacks: { label: c => `${c.formattedValue}${unit}` },
+        },
+      },
+      scales: spark
+        ? { x: { display: false }, y: { display: false } }
+        : {
+            x: {
+              grid: { display: false },
+              ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, color: '#7e786c',
+                       font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+              border: { color: 'rgba(236,228,211,0.08)' },
+            },
+            y: {
+              grid: { color: 'rgba(236,228,211,0.06)' },
+              ticks: { maxTicksLimit: 5, color: '#7e786c',
+                       font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+              border: { display: false },
+            },
+          },
+      interaction: { mode: 'index', intersect: false },
+    },
+  });
+  if (id) registerChart(id, instance);
+  return instance;
+}
+
+/**
+ * Draw a doughnut composition chart.
+ * @param {HTMLCanvasElement} canvas
+ * @param {string} id  canvas element id for registry
+ * @param {Array}  segments  [{label, value, color}]
+ */
+function donutChart(canvas, id, segments) {
+  if (!window.Chart || !canvas || !segments.length) return;
+  const ctx = canvas.getContext('2d');
+  const instance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: segments.map(s => s.label),
+      datasets: [{
+        data: segments.map(s => s.value),
+        backgroundColor: segments.map(s => s.color),
+        borderColor: '#0a0b0d',
+        borderWidth: 3,
+        hoverOffset: 6,
+      }],
+    },
+    options: {
+      responsive: true,
+      cutout: '68%',
+      plugins: {
+        legend: {
+          display: true, position: 'bottom',
+          labels: { boxWidth: 8, boxHeight: 8, padding: 12, usePointStyle: true, color: '#bdb6a6' },
+        },
+        tooltip: {
+          backgroundColor: '#0e1014', borderColor: 'rgba(236,228,211,0.16)', borderWidth: 1,
+          titleColor: '#bdb6a6', bodyColor: '#ECE4D3', padding: 10, displayColors: false,
+          callbacks: { label: c => `${c.label}: ${(+c.formattedValue).toFixed(1)} kg` },
+        },
+      },
+    },
+  });
+  registerChart(id, instance);
+  return instance;
+}
+
+// ── count-up animation (mirrors PWA render.js) ───────────────────────────────
+function countUp(node, to, { digits = 1, dur = 750 } = {}) {
+  if (to == null) { node.textContent = '—'; return; }
+  const start = performance.now();
+  function tick(t) {
+    const k     = Math.min(1, (t - start) / dur);
+    const eased = 1 - Math.pow(1 - k, 3);
+    node.textContent = (to * eased).toFixed(digits);
+    if (k < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ── favorability-aware delta chip ────────────────────────────────────────────
+function deltaChip(curr, prev, { higherIsBetter = false, digits = 1, unit = '' } = {}) {
+  if (curr == null || prev == null) return '';
+  const d = curr - prev;
+  if (Math.abs(d) < Math.pow(10, -digits) / 2) return `<span class="metric-delta">·</span>`;
+  const arrow = d > 0 ? '▲' : '▼';
+  const favorable = higherIsBetter ? d > 0 : d < 0;
+  const cls = favorable ? 'down' : 'up'; // 'down' = green (good), 'up' = amber (unfavorable)
+  return `<span class="metric-delta ${cls}">${arrow} ${Math.abs(d).toFixed(digits)}${unit}</span>`;
+}
+
+// ── metric card builder ───────────────────────────────────────────────────────
+function buildMetricCard(label, value, unit, curr, prev, opts = {}) {
+  const { sub = '', higherIsBetter = false, tag = '', tagClass = '', color = '' } = opts;
+  const article = document.createElement('article');
+  article.className = 'metric';
+  if (color) article.style.setProperty('--accent', color);
+  article.innerHTML = `
+    <div class="metric-top">
+      <span class="metric-label">${label}</span>
+      ${deltaChip(curr, prev, { higherIsBetter })}
+    </div>
+    <div class="metric-value">${value}${unit ? `<span class="metric-unit">${unit}</span>` : ''}</div>
+    <div class="metric-sub">${sub}</div>
+    ${tag ? `<span class="metric-tag ${tagClass}">${tag}</span>` : ''}`;
+  return article;
+}
+
+// ── TODAY renderer ────────────────────────────────────────────────────────────
+function renderToday(readings) {
+  const heroEl = $('today-hero');
+  const gridEl = $('today-grid');
+
+  if (!readings.length) {
+    heroEl.innerHTML = `
       <div class="hero-empty-msg">
         <div class="hero-big-text">No readings yet</div>
-        <p style="color:var(--muted);font-size:12px;margin:4px 0 0">Step on the scale to begin.</p>
+        <p style="color:var(--muted);font-size:12px;margin:8px 0 0">
+          No readings yet — step on the scale.
+        </p>
       </div>`;
+    gridEl.innerHTML = '';
     return;
   }
 
-  const bmi   = bmiInfo(reading.bmiClass);
-  const hrHtml = reading.heartRate != null
-    ? `<div class="hero-metric">
-         <span class="hero-metric-label" style="color:var(--c-hr)">Heart rate</span>
-         <span class="hero-metric-value" style="color:var(--c-hr)">${reading.heartRate}<span class="unit">bpm</span></span>
-       </div>`
-    : '';
+  const latest = readings[readings.length - 1];
+  const prev   = readings.length > 1 ? readings[readings.length - 2] : null;
 
-  hero.innerHTML = `
-    <div class="hero-ornament">
+  // ── hero card ──
+  heroEl.innerHTML = `
+    <div class="hero-ornament" aria-hidden="true">
       <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="100" cy="100" r="96" stroke="currentColor" stroke-width="0.8" stroke-dasharray="4 6"/>
         <circle cx="100" cy="100" r="72" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 8"/>
@@ -425,164 +560,258 @@ function renderHero(reading) {
         <circle cx="100" cy="100" r="5" fill="currentColor" opacity="0.4"/>
       </svg>
     </div>
-
-    <div class="hero-eyebrow">
-      Latest reading &nbsp;·&nbsp; <span>${fmtDate(reading.ts)}</span>
-    </div>
-
+    <div class="hero-eyebrow">Latest weigh-in · <span>${fmtRelative(latest.ts)}</span></div>
     <div class="hero-weight-row">
-      <span class="hero-weight">${fmtKg(reading.weightKg)}</span>
+      <span class="hero-weight" id="hero-weight-val">0.0</span>
       <span class="hero-unit">kg</span>
     </div>
+    <div id="hero-delta"></div>
+    <div class="hero-spark-wrap"><canvas id="hero-spark"></canvas></div>`;
 
-    <div class="hero-metrics">
-      <div class="hero-metric">
-        <span class="hero-metric-label" style="color:var(--c-bmi)">BMI</span>
-        <span class="hero-metric-value" style="color:var(--c-bmi)">
-          ${fmtBmi(reading.bmi)}
-          ${bmi.label ? `<span class="bmi-badge ${bmi.token}">${bmi.label}</span>` : ''}
-        </span>
-      </div>
-      ${reading.bodyFatPct != null ? `
-      <div class="hero-metric">
-        <span class="hero-metric-label" style="color:var(--c-fat)">Body fat</span>
-        <span class="hero-metric-value" style="color:var(--c-fat)">${fmtPct(reading.bodyFatPct)}<span class="unit">%</span></span>
-      </div>` : ''}
-      ${reading.bmrKcal != null ? `
-      <div class="hero-metric">
-        <span class="hero-metric-label" style="color:var(--c-energy)">BMR</span>
-        <span class="hero-metric-value" style="color:var(--c-energy)">${fmtInt(reading.bmrKcal)}<span class="unit">kcal</span></span>
-      </div>` : ''}
-      ${reading.bodyWaterPct != null ? `
-      <div class="hero-metric">
-        <span class="hero-metric-label" style="color:var(--c-water)">Body water</span>
-        <span class="hero-metric-value" style="color:var(--c-water)">${fmtPct(reading.bodyWaterPct)}<span class="unit">%</span></span>
-      </div>` : ''}
-      ${hrHtml}
-    </div>`;
-}
+  // count-up animation
+  countUp($('hero-weight-val'), latest.weightKg, { digits: 1 });
 
-// ── render weight trend chart ─────────────────────────────────────────────────
-function renderChart(readings) {
-  // Take last MAX_CHART_PTS readings (array is already sorted asc by ts)
-  const pts = readings.slice(-MAX_CHART_PTS);
-
-  const labels = pts.map(r => fmtShortDate(r.ts));
-  const data   = pts.map(r => r.weightKg);
-
-  // Update value label
-  const lastVal = data.length ? data[data.length - 1] : null;
-  const el = $('chart-current-val');
-  if (el) el.textContent = lastVal != null ? `${fmtKg(lastVal)} kg` : '—';
-
-  const ctx = $('weight-chart');
-  if (!ctx) return;
-
-  const gold = getComputedStyle(document.documentElement)
-    .getPropertyValue('--gold').trim() || '#d8a24a';
-  const goldSoft = 'rgba(216,162,74,0.12)';
-  const mutedColor = 'rgba(200,190,170,0.25)';
-
-  if (weightChart) {
-    // Update existing chart data in-place
-    weightChart.data.labels = labels;
-    weightChart.data.datasets[0].data = data;
-    weightChart.update('none'); // skip animation on refresh
-    return;
+  // delta vs previous
+  const deltaWrap = $('hero-delta');
+  if (prev && prev.weightKg != null && latest.weightKg != null) {
+    const d   = latest.weightKg - prev.weightKg;
+    const dir = d < 0 ? 'down' : d > 0 ? 'up' : '';
+    const arrow = d < 0 ? '▼' : d > 0 ? '▲' : '·';
+    deltaWrap.innerHTML = `<span class="hero-delta-badge ${dir}">${arrow} ${Math.abs(d).toFixed(1)} kg since ${fmtShortDate(prev.ts)}</span>`;
   }
 
-  weightChart = new window.Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data,
-        borderColor: gold,
-        borderWidth: 2,
-        pointRadius: pts.length > 20 ? 0 : 3,
-        pointHoverRadius: 5,
-        pointBackgroundColor: gold,
-        fill: true,
-        backgroundColor: (context) => {
-          const chart = context.chart;
-          const { ctx: c, chartArea } = chart;
-          if (!chartArea) return goldSoft;
-          const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          grad.addColorStop(0, 'rgba(216,162,74,0.22)');
-          grad.addColorStop(1, 'rgba(216,162,74,0.01)');
-          return grad;
-        },
-        tension: 0.35,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: 'rgba(14,16,20,0.92)',
-          borderColor: 'rgba(216,162,74,0.35)',
-          borderWidth: 1,
-          titleColor: '#bdb6a6',
-          bodyColor: '#ece4d3',
-          titleFont: { family: "'IBM Plex Mono', monospace", size: 10 },
-          bodyFont:  { family: "'IBM Plex Mono', monospace", size: 13 },
-          callbacks: {
-            label: ctx => ` ${fmtKg(ctx.parsed.y)} kg`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          grid: { color: mutedColor, drawTicks: false },
-          ticks: {
-            color: '#7e786c',
-            font: { family: "'IBM Plex Mono', monospace", size: 10 },
-            maxRotation: 0,
-            maxTicksLimit: 8,
-          },
-          border: { color: mutedColor },
-        },
-        y: {
-          grid: { color: mutedColor, drawTicks: false },
-          ticks: {
-            color: '#7e786c',
-            font: { family: "'IBM Plex Mono', monospace", size: 10 },
-            callback: v => `${v} kg`,
-            maxTicksLimit: 5,
-          },
-          border: { color: mutedColor },
-        },
-      },
-    },
+  // sparkline — last SPARK_PTS readings
+  const recent = readings.slice(-SPARK_PTS);
+  const sparkCanvas = $('hero-spark');
+  if (sparkCanvas) {
+    lineChart(sparkCanvas, {
+      id: 'hero-spark',
+      labels: recent.map(() => ''),
+      values: recent.map(r => r.weightKg),
+      color: '#d8a24a',
+      spark: true,
+    });
+  }
+
+  // ── metric cards ──
+  const cards = [
+    buildMetricCard(
+      'Body fat', fmtNum1(latest.bodyFatPct), '%',
+      latest.bodyFatPct, prev?.bodyFatPct,
+      {
+        color: 'var(--c-fat)',
+        sub: latest.fatMassKg != null
+          ? `${fmtNum1(latest.fatMassKg)} kg fat · ${fmtNum1(latest.ffmKg)} kg lean` : '',
+      }
+    ),
+    buildMetricCard(
+      'Body water', fmtNum1(latest.bodyWaterPct), '%',
+      latest.bodyWaterPct, prev?.bodyWaterPct,
+      {
+        color: 'var(--c-water)', higherIsBetter: true,
+        sub: latest.tbwL != null ? `${fmtNum1(latest.tbwL)} L total` : '',
+      }
+    ),
+    buildMetricCard(
+      'BMI', fmtNum1(latest.bmi), '',
+      latest.bmi, prev?.bmi,
+      {
+        color: 'var(--c-bmi)',
+        tag: latest.bmiClass || '',
+        tagClass: bmiTagClass(latest.bmi),
+      }
+    ),
+    buildMetricCard(
+      'Resting burn', latest.bmrKcal != null ? fmtInt(latest.bmrKcal) : '—', '',
+      null, null,
+      { color: 'var(--c-energy)', sub: 'kcal/day · Mifflin-St Jeor' }
+    ),
+    buildMetricCard(
+      'Heart rate', latest.heartRate != null ? fmtInt(latest.heartRate) : '—', 'bpm',
+      null, null,
+      {
+        color: 'var(--c-hr)',
+        sub: latest.heartRate != null ? 'at last weigh-in' : 'not captured',
+      }
+    ),
+    buildMetricCard(
+      'Fat mass', fmtNum1(latest.fatMassKg), 'kg',
+      latest.fatMassKg, prev?.fatMassKg,
+      { color: 'var(--c-mass)' }
+    ),
+    buildMetricCard(
+      'Lean mass', fmtNum1(latest.ffmKg), 'kg',
+      latest.ffmKg, prev?.ffmKg,
+      { color: 'var(--c-lean)', higherIsBetter: true, sub: 'fat-free mass' }
+    ),
+  ];
+
+  gridEl.innerHTML = '';
+  cards.forEach((card, i) => {
+    card.style.animationDelay = `${i * 55}ms`;
+    gridEl.appendChild(card);
   });
 }
 
-// ── render history table ──────────────────────────────────────────────────────
-function renderTable(readings) {
-  const tbody = $('hist-tbody');
-  if (!tbody) return;
+// ── TRENDS renderer ───────────────────────────────────────────────────────────
+function renderTrends(readings) {
+  const gridEl = $('trends-grid');
 
-  // Most-recent first
-  const rows = [...readings].reverse();
-
-  if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">No readings recorded.</td></tr>`;
+  if (readings.length < 2) {
+    gridEl.innerHTML = `
+      <div class="chart-card">
+        <h3 class="chart-card-title">Trends</h3>
+        <p class="metric-sub" style="padding:8px 0">Need at least two weigh-ins to chart a trend.</p>
+      </div>`;
     return;
   }
 
-  tbody.innerHTML = rows.map(r => `
+  const labels = readings.map(r => fmtShortDate(r.ts));
+  const latest = readings[readings.length - 1];
+  gridEl.innerHTML = '';
+
+  const series = [
+    { title: 'Weight',    key: 'weightKg',    unit: ' kg', color: '#d8a24a', now: fmtNum1(latest.weightKg) + ' kg',  id: 'chart-weight' },
+    { title: 'Body fat',  key: 'bodyFatPct',  unit: '%',   color: '#ec9054', now: fmtNum1(latest.bodyFatPct) + '%',  id: 'chart-fat'    },
+    { title: 'BMI',       key: 'bmi',         unit: '',    color: '#b98cf0', now: fmtNum1(latest.bmi),               id: 'chart-bmi'    },
+  ];
+
+  for (const s of series) {
+    const card = document.createElement('div');
+    card.className = 'chart-card';
+    card.innerHTML = `
+      <h3 class="chart-card-title">${s.title}</h3>
+      <div class="chart-now">${s.now}</div>
+      <div class="chart-holder"><canvas id="${s.id}"></canvas></div>`;
+    gridEl.appendChild(card);
+    lineChart(card.querySelector('canvas'), {
+      id: s.id,
+      labels,
+      values: readings.map(r => r[s.key]),
+      color: s.color,
+      unit: s.unit,
+    });
+  }
+
+  // composition donut
+  const segs = [];
+  if (latest.fatMassKg != null) segs.push({ label: 'Fat',       value: latest.fatMassKg, color: '#d8a24a' });
+  if (latest.ffmKg     != null) segs.push({ label: 'Lean mass', value: latest.ffmKg,     color: '#7cba8c' });
+
+  if (segs.length) {
+    const donutCard = document.createElement('div');
+    donutCard.className = 'chart-card';
+    donutCard.innerHTML = `
+      <h3 class="chart-card-title">Composition · latest</h3>
+      <div class="chart-now">${fmtNum1(latest.weightKg)} kg</div>
+      <div class="chart-holder tall"><canvas id="chart-donut"></canvas></div>`;
+    gridEl.appendChild(donutCard);
+    donutChart(donutCard.querySelector('canvas'), 'chart-donut', segs);
+  }
+}
+
+// ── HISTORY renderer ──────────────────────────────────────────────────────────
+function renderHistory(readings) {
+  const wrapEl = $('history-wrap');
+
+  if (!readings.length) {
+    wrapEl.innerHTML = `<div style="padding:28px;color:var(--muted);font-size:12px">No readings recorded yet.</div>`;
+    return;
+  }
+
+  const rows = [...readings].reverse().map(r => `
     <tr>
-      <td>${fmtDate(r.ts)}</td>
-      <td class="num">${fmtKg(r.weightKg) ?? '<span class="em-dash">—</span>'}</td>
-      <td class="num hide-sm">${fmtBmi(r.bmi) ?? '<span class="em-dash">—</span>'}</td>
-      <td class="num hide-sm">${r.bodyFatPct != null ? fmtPct(r.bodyFatPct) + '%' : '<span class="em-dash">—</span>'}</td>
-      <td class="num hide-sm">${fmtInt(r.bmrKcal) ?? '<span class="em-dash">—</span>'}</td>
-      <td class="num"><span class="source-badge">${r.source ?? '—'}</span></td>
-      <td class="col-actions"><button class="del-btn" data-id="${r.id}" title="Delete reading" aria-label="Delete reading">✕</button></td>
+      <td>${fmtDateTime(r.ts)}${r.source === 'seed' ? ' <span class="source-badge">demo</span>' : ''}</td>
+      <td class="num">${fmtKg(r.weightKg) ?? '—'}</td>
+      <td class="num hide-sm">${r.bodyFatPct != null ? fmtPct(r.bodyFatPct) + '%' : '—'}</td>
+      <td class="num hide-sm">${r.bmi != null ? (+r.bmi).toFixed(1) : '—'}</td>
+      <td class="num hide-sm">${r.heartRate != null ? r.heartRate : '—'}</td>
+      <td style="text-align:right">
+        <button class="del-btn" data-id="${r.id}" title="Delete reading" aria-label="Delete reading">✕</button>
+      </td>
     </tr>`).join('');
+
+  wrapEl.innerHTML = `
+    <div class="history-scroll">
+      <table class="ledger" aria-label="Reading history">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Weight</th>
+            <th class="hide-sm">Fat %</th>
+            <th class="hide-sm">BMI</th>
+            <th class="hide-sm">HR</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  // Wire delete buttons
+  wrapEl.querySelectorAll('.del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      if (!confirm('Delete this reading? This cannot be undone.')) return;
+      try {
+        const res = await fetch('./api/readings/' + id, { method: 'DELETE' });
+        if (res.ok || res.status === 204) {
+          await refresh();
+        } else {
+          console.warn('[occultd] delete failed:', res.status);
+        }
+      } catch (err) {
+        console.warn('[occultd] delete error:', err.message);
+      }
+    });
+  });
+}
+
+// ── tab switching ─────────────────────────────────────────────────────────────
+function initTabs() {
+  const tabBar     = $('tab-bar');
+  const underline  = $('tab-underline');
+
+  function activateTab(name) {
+    activeTab = name;
+
+    // Update button states
+    tabBar.querySelectorAll('.tab-btn').forEach(btn => {
+      const active = btn.dataset.tab === name;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    // Update panel visibility
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+      panel.classList.toggle('is-active', panel.id === `panel-${name}`);
+    });
+
+    // Move underline
+    const activeBtn = tabBar.querySelector(`.tab-btn[data-tab="${name}"]`);
+    if (activeBtn && underline) {
+      underline.style.left  = activeBtn.offsetLeft + 'px';
+      underline.style.width = activeBtn.offsetWidth + 'px';
+    }
+
+    // Render the active tab from cached data
+    renderActiveTab();
+  }
+
+  tabBar.addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn');
+    if (btn && btn.dataset.tab) activateTab(btn.dataset.tab);
+  });
+
+  // Set initial underline position after layout
+  requestAnimationFrame(() => activateTab('today'));
+}
+
+/** Re-render whichever tab is currently active using cachedReadings. */
+function renderActiveTab() {
+  if (activeTab === 'today')   renderToday(cachedReadings);
+  if (activeTab === 'trends')  renderTrends(cachedReadings);
+  if (activeTab === 'history') renderHistory(cachedReadings);
 }
 
 // ── update footer refresh time ────────────────────────────────────────────────
@@ -597,88 +826,61 @@ function updateRefreshLabel() {
 async function refresh() {
   setStatus('connecting');
   try {
-    // Fetch all three endpoints in parallel
-    const [profile, latest, readings] = await Promise.all([
+    const [profile, readings] = await Promise.all([
       apiFetch(API.profile),
-      apiFetch(API.latest),
       apiFetch(API.readings),
     ]);
 
     renderProfile(profile);
-    renderHero(latest);
-    renderChart(Array.isArray(readings) ? readings : []);
-    renderTable(Array.isArray(readings) ? readings : []);
+    cachedReadings = Array.isArray(readings) ? readings : [];
+    renderActiveTab();
     updateRefreshLabel();
     setStatus('live');
   } catch (err) {
     console.warn('[occultd] fetch error:', err.message);
     setStatus('error');
-    // On the first load (no chart yet) render empty hero gracefully
-    if (!weightChart) {
-      renderHero({});
-      renderTable([]);
+    if (!cachedReadings.length) {
+      renderToday([]);
     }
   }
 }
 
 // ── theme toggle ──────────────────────────────────────────────────────────────
 function initTheme() {
-  const btn = $('theme-btn');
+  const btn   = $('theme-btn');
   const saved = localStorage.getItem('occultd-theme');
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
+  if (saved) {
+    document.documentElement.setAttribute('data-theme', saved);
+    if (btn) btn.textContent = saved === 'light' ? '◑' : '◐';
+  }
 
   btn?.addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme');
-    const next = current === 'light' ? 'dark' : 'light';
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next    = current === 'light' ? 'dark' : 'light';
     document.documentElement.setAttribute('data-theme', next === 'dark' ? '' : next);
     localStorage.setItem('occultd-theme', next);
     btn.textContent = next === 'light' ? '◑' : '◐';
-    // Rebuild chart with new colour context
-    if (weightChart) {
-      weightChart.destroy();
-      weightChart = null;
-      // re-fetch to repaint (or just re-render with cached data if we had it)
-      refresh();
-    }
-  });
-}
-
-// ── delete reading ────────────────────────────────────────────────────────────
-function initDeleteListener() {
-  const tbody = $('hist-tbody');
-  if (!tbody) return;
-  tbody.addEventListener('click', async e => {
-    const btn = e.target.closest('.del-btn');
-    if (!btn) return;
-    const id = btn.dataset.id;
-    if (!confirm('Delete this reading? This cannot be undone.')) return;
-    try {
-      const res = await fetch('./api/readings/' + id, { method: 'DELETE' });
-      if (res.ok || res.status === 204) {
-        await refresh();
-      } else {
-        console.warn('[occultd] delete failed:', res.status);
-      }
-    } catch (err) {
-      console.warn('[occultd] delete error:', err.message);
-    }
+    // Destroy all charts so they redraw with the new colour context
+    Object.keys(chartRegistry).forEach(id => {
+      try { chartRegistry[id].destroy(); } catch (_) {}
+      delete chartRegistry[id];
+    });
+    renderActiveTab();
   });
 }
 
 // ── boot ──────────────────────────────────────────────────────────────────────
 async function init() {
+  ensureChartTheme();
   initTheme();
-  initDeleteListener();
+  initTabs();
   initSettings();
 
-  // Check whether the user has completed onboarding.
-  // If not, block until the wizard resolves before starting the dashboard.
   let serverSettings = null;
   try {
     serverSettings = await apiFetch(API.settings);
   } catch (err) {
     console.warn('[occultd] could not fetch settings on boot:', err.message);
-    // Proceed to dashboard anyway — server may not support the endpoint yet.
   }
 
   if (serverSettings && serverSettings.onboarded === false) {

@@ -95,6 +95,11 @@ func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err)
 		return
 	}
+	// Backfill body-comp on existing readings from the (possibly new) profile so
+	// pre-onboarding rows pick up BMI etc.
+	if err := s.store.RederiveAll(cfg.Profile); err != nil {
+		log.Printf("re-derive readings: %v", err)
+	}
 	cfg.Normalize() // reflect derived flags back to the caller
 	writeJSON(w, map[string]any{"ok": true, "onboarded": cfg.Onboarded})
 }

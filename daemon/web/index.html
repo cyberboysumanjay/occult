@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>occult — body metrics</title>
 
+  <!-- Apply saved theme before first paint to avoid a flash -->
+  <script>try{var t=localStorage.getItem('occultd-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+
   <!-- No external CDN; Chart.js is vendored locally -->
   <script src="./vendor/chart.umd.min.js"></script>
   <link rel="stylesheet" href="./styles.css" />
@@ -52,7 +55,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="ob-height">Height (cm)</label>
-          <input id="ob-height" class="form-input" type="number" min="1" max="300" placeholder="e.g. 178" required />
+          <input id="ob-height" class="form-input" type="number" min="1" max="300" placeholder="e.g. 170" required />
         </div>
       </div>
 
@@ -108,7 +111,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="st-height">Height (cm)</label>
-          <input id="st-height" class="form-input" type="number" min="1" max="300" placeholder="e.g. 178" required />
+          <input id="st-height" class="form-input" type="number" min="1" max="300" placeholder="e.g. 170" required />
         </div>
       </div>
 
@@ -199,64 +202,40 @@
     </div>
   </header>
 
-  <!-- ── main content ────────────────────────────────────────────────── -->
+  <!-- ── connecting banner ────────────────────────────────────────────── -->
+  <div id="connecting-banner" class="connecting-banner" role="status" aria-live="polite">
+    connecting to occultd — retrying every 30 s…
+  </div>
+
+  <!-- ── tab bar ──────────────────────────────────────────────────────── -->
+  <nav class="tab-bar" id="tab-bar" aria-label="Dashboard tabs">
+    <button class="tab-btn is-active" data-tab="today" aria-selected="true">Today</button>
+    <button class="tab-btn" data-tab="trends" aria-selected="false">Trends</button>
+    <button class="tab-btn" data-tab="history" aria-selected="false">History</button>
+    <span class="tab-underline" id="tab-underline" aria-hidden="true"></span>
+  </nav>
+
+  <!-- ── main content ─────────────────────────────────────────────────── -->
   <main>
 
-    <!-- connecting / error banner -->
-    <div id="connecting-banner" class="connecting-banner" role="status" aria-live="polite">
-      connecting to occultd — retrying every 30 s…
-    </div>
-
-    <!-- ── hero: latest reading ───────────────────────────────────────── -->
-    <section aria-label="Latest reading">
-      <div class="section-label">Latest</div>
-      <!-- content injected by renderHero() -->
-      <div id="hero-card" class="hero-card">
+    <!-- TODAY panel -->
+    <section id="panel-today" class="tab-panel is-active" aria-label="Today">
+      <div id="today-hero" class="hero-card">
         <div class="hero-empty-msg">
           <div class="hero-big-text" style="color:var(--muted)">…</div>
         </div>
       </div>
+      <div id="today-grid" class="card-grid"></div>
     </section>
 
-    <!-- ── weight trend chart ─────────────────────────────────────────── -->
-    <section aria-label="Weight trend">
-      <div class="section-label">Weight trend</div>
-      <div class="chart-card">
-        <div class="chart-card-header">
-          <span class="chart-card-title">Weight over time (last 90 readings)</span>
-          <span class="chart-card-value" id="chart-current-val">—</span>
-        </div>
-        <div class="chart-holder">
-          <canvas id="weight-chart" aria-label="Weight trend chart"></canvas>
-        </div>
-      </div>
+    <!-- TRENDS panel -->
+    <section id="panel-trends" class="tab-panel" aria-label="Trends">
+      <div id="trends-grid" class="trends-grid"></div>
     </section>
 
-    <!-- ── history table ──────────────────────────────────────────────── -->
-    <section aria-label="Reading history">
-      <div class="section-label">History</div>
-      <div class="history-wrap">
-        <div class="history-scroll">
-          <table class="hist" aria-label="Reading history">
-            <thead>
-              <tr>
-                <th>Date / Time</th>
-                <th>Weight</th>
-                <th class="hide-sm">BMI</th>
-                <th class="hide-sm">Body fat</th>
-                <th class="hide-sm">BMR</th>
-                <th>Source</th>
-                <th class="col-actions"></th>
-              </tr>
-            </thead>
-            <tbody id="hist-tbody">
-              <tr>
-                <td colspan="7" style="text-align:center;color:var(--muted);padding:22px">Loading…</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <!-- HISTORY panel -->
+    <section id="panel-history" class="tab-panel" aria-label="History">
+      <div id="history-wrap" class="ledger-wrap"></div>
     </section>
 
   </main>

@@ -21,11 +21,15 @@
   --warn:  #d99355;
   --bad:   #d2706b;
 
+  /* semantic metric accents */
   --c-fat:    #ec9054;
+  --c-muscle: #4fc491;
   --c-water:  #4aa6e0;
   --c-bmi:    #b98cf0;
   --c-energy: #f0b13d;
   --c-hr:     #ef6f8e;
+  --c-mass:   #e3795c;
+  --c-lean:   #7f9fe6;
 
   --serif: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
   --mono:  'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
@@ -55,14 +59,19 @@
   --bad:   #c0473f;
   --shadow: 0 18px 50px -24px rgba(60,48,24,0.28);
   --c-fat:    #cf6f33;
+  --c-muscle: #2f9e6e;
   --c-water:  #2f86c4;
   --c-bmi:    #9460d8;
   --c-energy: #c2871a;
   --c-hr:     #d8506f;
+  --c-mass:   #c75c40;
+  --c-lean:   #5577c8;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+
+[hidden] { display: none !important; }
 
 body {
   background:
@@ -75,6 +84,7 @@ body {
   -webkit-font-smoothing: antialiased;
   min-height: 100svh;
   overflow-x: hidden;
+  padding-bottom: 60px;
 }
 
 /* ── atmospheric layer ── */
@@ -124,30 +134,65 @@ header {
   50%      { box-shadow: 0 0 0 6px rgba(124,186,140,0); }
 }
 .status-text { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-/* theme toggle */
+/* theme / settings buttons */
 .theme-btn {
   background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
   color: var(--ink-dim); font-size: 14px; padding: 6px 10px; cursor: pointer;
-  transition: border-color 0.2s, background 0.2s;
-  line-height: 1;
+  transition: border-color 0.2s, background 0.2s; line-height: 1;
 }
 .theme-btn:hover { border-color: var(--line-2); background: var(--panel-2); }
 
-/* ── main layout ── */
-main {
-  max-width: var(--maxw); margin: 0 auto;
-  padding: 26px 24px 60px;
-  display: flex; flex-direction: column; gap: 22px;
-}
-
 /* ── connecting banner ── */
 .connecting-banner {
-  border: 1px solid var(--line); border-radius: var(--r);
-  background: var(--panel); padding: 12px 18px;
+  max-width: var(--maxw); margin: 0 auto;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--line);
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--muted); text-align: center; display: none;
 }
 .connecting-banner.visible { display: block; }
+
+/* ── tab bar ── */
+.tab-bar {
+  max-width: var(--maxw); margin: 0 auto;
+  padding: 0 24px;
+  display: flex; gap: 0; align-items: stretch;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.tab-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 14px 20px 13px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--muted);
+  transition: color 0.2s; position: relative; white-space: nowrap;
+}
+.tab-btn:hover { color: var(--ink-dim); }
+.tab-btn.is-active { color: var(--ink); }
+.tab-underline {
+  position: absolute; bottom: -1px; height: 2px;
+  background: var(--gold); border-radius: 2px;
+  box-shadow: 0 0 8px rgba(216,162,74,0.55);
+  transition: left 0.26s cubic-bezier(.4,.1,.2,1), width 0.26s cubic-bezier(.4,.1,.2,1);
+  pointer-events: none;
+}
+
+/* ── main layout ── */
+main {
+  max-width: var(--maxw); margin: 0 auto;
+  padding: 26px 24px 40px;
+}
+
+/* ── tab panels ── */
+.tab-panel { display: none; }
+.tab-panel.is-active {
+  display: block;
+  animation: fadeUp 0.35s ease both;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* ── hero card ── */
 .hero-card {
@@ -155,6 +200,7 @@ main {
   background: linear-gradient(160deg, var(--panel-2) 0%, transparent 70%);
   padding: 32px 30px 28px;
   position: relative; overflow: hidden;
+  margin-bottom: 20px;
 }
 .hero-ornament {
   position: absolute; right: -50px; top: 50%; transform: translateY(-50%);
@@ -165,7 +211,7 @@ main {
 .hero-empty-msg {
   text-align: center; padding: 18px 0 4px;
 }
-.hero-empty-msg .hero-big-text {
+.hero-big-text {
   font-family: var(--serif); font-size: 28px; color: var(--muted); margin-bottom: 6px;
 }
 
@@ -187,106 +233,150 @@ main {
   font-family: var(--mono); font-size: 18px; color: var(--muted); font-weight: 400;
 }
 
-.hero-metrics {
-  display: flex; flex-wrap: wrap; gap: 10px 22px;
-  margin-top: 18px; padding-top: 16px;
-  border-top: 1px solid var(--line);
+/* hero delta badge */
+.hero-delta-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  margin-top: 12px; font-size: 12px; padding: 5px 12px;
+  border-radius: 999px; border: 1px solid var(--line);
+  background: var(--panel); color: var(--ink-dim);
 }
-.hero-metric {
-  display: flex; flex-direction: column; gap: 1px;
-}
-.hero-metric-label {
-  font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
-}
-.hero-metric-value {
-  font-family: var(--serif); font-size: 22px; color: var(--ink); line-height: 1.1;
-}
-.hero-metric-value .unit {
-  font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 2px;
-}
-.bmi-badge {
-  display: inline-block; font-family: var(--mono); font-size: 9px;
-  letter-spacing: 0.1em; text-transform: uppercase;
-  padding: 2px 7px; border-radius: 999px; border: 1px solid;
-  margin-left: 6px; vertical-align: middle; line-height: 1.6;
-}
-.bmi-badge.underweight { color: var(--c-water); border-color: rgba(74,166,224,0.35); }
-.bmi-badge.normal      { color: var(--good);    border-color: rgba(124,186,140,0.35); }
-.bmi-badge.overweight  { color: var(--warn);    border-color: rgba(217,147,85,0.35); }
-.bmi-badge.obese       { color: var(--bad);     border-color: rgba(210,112,107,0.35); }
+.hero-delta-badge.down { color: var(--good); border-color: rgba(124,186,140,0.3); }
+.hero-delta-badge.up   { color: var(--warn); border-color: rgba(217,147,85,0.3); }
 
-/* ── section label ── */
-.section-label {
-  font-size: 9.5px; letter-spacing: 0.24em; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 12px;
+/* sparkline wrapper — fixed height so Chart.js can't enter a resize loop */
+.hero-spark-wrap {
+  position: relative; width: 100%; max-width: 460px; height: 56px;
+  margin-top: 18px; overflow: hidden;
 }
+.hero-spark-wrap canvas { display: block; }
 
-/* ── chart card ── */
+/* ── metric card grid ── */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+.metric {
+  border: 1px solid var(--line); border-radius: var(--r);
+  padding: 16px 17px;
+  background: linear-gradient(180deg, var(--panel), transparent);
+  position: relative; overflow: hidden;
+  opacity: 0; animation: cardIn 0.5s ease forwards;
+  cursor: default;
+}
+/* left accent bar */
+.metric::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--accent, var(--gold)); opacity: 0.9;
+}
+/* colour wash top-right */
+.metric::after {
+  content: ''; position: absolute; top: 0; right: 0; width: 90px; height: 90px;
+  pointer-events: none;
+  background: radial-gradient(circle at top right,
+    color-mix(in srgb, var(--accent, var(--gold)) 20%, transparent), transparent 72%);
+}
+.metric > * { position: relative; z-index: 1; }
+.metric:hover { border-color: var(--line-2); transform: translateY(-3px); transition: transform .2s, border-color .2s; }
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.metric-top {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.metric-label {
+  font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--accent, var(--muted));
+}
+.metric-delta { font-size: 10.5px; color: var(--muted); }
+.metric-delta.down { color: var(--good); }
+.metric-delta.up   { color: var(--warn); }
+.metric-value {
+  font-family: var(--serif); font-weight: 600; font-size: 38px; line-height: 1; color: var(--ink);
+}
+.metric-unit {
+  font-family: var(--mono); font-size: 13px; color: var(--muted); margin-left: 3px; font-weight: 400;
+}
+.metric-sub {
+  font-size: 10.5px; color: var(--ink-dim); margin-top: 8px; min-height: 14px;
+}
+.metric-tag {
+  display: inline-block; margin-top: 10px; font-size: 9.5px; letter-spacing: 0.06em;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-dim);
+}
+.metric-tag.warn { color: var(--warn); border-color: rgba(217,147,85,0.35); }
+.metric-tag.bad  { color: var(--bad);  border-color: rgba(210,112,107,0.35); }
+.metric-tag.good { color: var(--good); border-color: rgba(124,186,140,0.35); }
+
+/* ── trends grid ── */
+.trends-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
 .chart-card {
   border: 1px solid var(--line); border-radius: var(--r);
   background: linear-gradient(180deg, var(--panel) 0%, transparent 100%);
   padding: 18px 18px 14px;
 }
-.chart-card-header {
-  display: flex; align-items: baseline; justify-content: space-between;
-  margin-bottom: 14px; flex-wrap: wrap; gap: 6px;
-}
 .chart-card-title {
-  font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 4px;
 }
-.chart-card-value {
-  font-family: var(--serif); font-size: 20px; color: var(--ink);
+/* alias so both .chart-card h3 and .chart-card-title work */
+.chart-card h3 {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 4px; font-weight: 500;
+}
+.chart-now {
+  font-family: var(--serif); font-size: 24px; color: var(--ink); margin-bottom: 10px;
 }
 .chart-holder {
   position: relative; height: 200px;
 }
+.chart-holder.tall { height: 240px; }
 
-/* ── history table ── */
-.history-wrap {
+/* ── history / ledger ── */
+.ledger-wrap {
   border: 1px solid var(--line); border-radius: var(--r);
   overflow: hidden;
 }
 .history-scroll {
-  max-height: 340px; overflow-y: auto;
-  /* custom scrollbar */
+  max-height: 480px; overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
 }
 .history-scroll::-webkit-scrollbar { width: 5px; }
 .history-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 3px; }
 
-table.hist {
+table.ledger {
   width: 100%; border-collapse: collapse; font-size: 12px;
 }
-table.hist thead { position: sticky; top: 0; z-index: 2; }
-table.hist th {
+table.ledger thead { position: sticky; top: 0; z-index: 2; }
+table.ledger th {
   background: var(--bg-2); padding: 10px 14px;
   font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
   color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line-2);
   text-align: right; white-space: nowrap;
 }
-table.hist th:first-child { text-align: left; }
-table.hist td {
+table.ledger th:first-child { text-align: left; }
+table.ledger td {
   padding: 10px 14px; border-bottom: 1px solid var(--line);
   color: var(--ink-dim); text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-table.hist td:first-child { text-align: left; color: var(--ink); }
-table.hist tr:last-child td { border-bottom: none; }
-table.hist tr:hover td { background: var(--panel); }
+table.ledger td:first-child { text-align: left; color: var(--ink); }
+table.ledger tr:last-child td { border-bottom: none; }
+table.ledger tr:hover td { background: var(--panel); }
+table.ledger td.num { text-align: right; color: var(--ink); }
+
 .source-badge {
   display: inline-block; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line);
   color: var(--muted);
 }
-.em-dash { color: var(--muted); opacity: 0.4; }
 
-/* ── actions column ── */
-table.hist th.col-actions,
-table.hist td.col-actions {
-  width: 36px; min-width: 36px; padding: 6px 10px;
-  text-align: right;
-}
 .del-btn {
   background: none; border: none; cursor: pointer;
   color: var(--muted); font-size: 11px; line-height: 1;
@@ -296,8 +386,8 @@ table.hist td.col-actions {
   transition: color 0.15s, background 0.15s;
 }
 .del-btn:hover {
-  color: #d9534f;
-  background: rgba(217, 83, 79, 0.12);
+  color: var(--bad);
+  background: rgba(210,112,107,0.12);
 }
 
 /* ── footer ── */
@@ -423,7 +513,6 @@ footer {
   border-radius: var(--r); color: var(--ink); font-family: var(--mono);
   font-size: 13px; padding: 8px 11px; width: 100%;
   outline: none; transition: border-color 0.2s, background 0.2s;
-  /* prevent browser default number spinners looking off */
   -moz-appearance: textfield;
 }
 .form-input:focus {
@@ -494,13 +583,29 @@ details[open] > .form-details-summary::before { transform: rotate(90deg); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--line-2); background: var(--panel-2); color: var(--ink); }
 .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
 
+/* ── bmi badge (kept for backward compat) ── */
+.bmi-badge {
+  display: inline-block; font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid;
+  margin-left: 6px; vertical-align: middle; line-height: 1.6;
+}
+.bmi-badge.underweight { color: var(--c-water); border-color: rgba(74,166,224,0.35); }
+.bmi-badge.normal      { color: var(--good);    border-color: rgba(124,186,140,0.35); }
+.bmi-badge.overweight  { color: var(--warn);    border-color: rgba(217,147,85,0.35); }
+.bmi-badge.obese       { color: var(--bad);     border-color: rgba(210,112,107,0.35); }
+
 /* ── responsive ── */
 @media (max-width: 600px) {
   header { padding: 16px; }
   main   { padding: 18px 14px 40px; }
   .hero-card { padding: 22px 18px 20px; }
   .hero-ornament { display: none; }
-  table.hist th.hide-sm,
-  table.hist td.hide-sm { display: none; }
+  .tab-bar { padding: 0 14px; }
+  .tab-btn { padding: 12px 14px 11px; font-size: 10px; }
+  .card-grid { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
+  .trends-grid { grid-template-columns: 1fr; }
   .chart-holder { height: 160px; }
+  table.ledger th.hide-sm,
+  table.ledger td.hide-sm { display: none; }
 }

@@ -3,6 +3,8 @@ package store
 import (
 	"path/filepath"
 	"testing"
+
+	"occultd/internal/settings"
 )
 
 func tempStore(t *testing.T) *Store {
@@ -93,6 +95,42 @@ func TestListOrderingAndSince(t *testing.T) {
 	if len(since) != 2 {
 		t.Errorf("since filter: len = %d, want 2 (strictly greater)", len(since))
 	}
+}
+
+func TestRederiveAll_BackfillsBodyComp(t *testing.T) {
+	st := tempStore(t)
+	// A weight-only reading, as captured before onboarding (no body-comp).
+	id, err := st.Insert(Reading{Ts: "2026-06-12T08:00:00Z", WeightKg: 80, Source: "scale"})
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	if r, _ := st.Latest(); r == nil || r.BMI != nil {
+		t.Fatalf("pre-backfill reading should have nil BMI, got %+v", r)
+	}
+
+	// Saving a profile re-derives existing rows.
+	if err := st.RederiveAll(settings.Profile{Name: "Test", Sex: "male", BirthYear: 1990, HeightCm: 175}); err != nil {
+		t.Fatalf("rederive: %v", err)
+	}
+	r, _ := st.Latest()
+	if r == nil || r.BMI == nil {
+		t.Fatalf("BMI should be populated after backfill, got %+v", r)
+	}
+	if *r.BMI < 24 || *r.BMI > 28 { // 80 kg @ 1.75 m → ~26.1
+		t.Errorf("BMI = %v, expected ~31.9", *r.BMI)
+	}
+	if r.BMRKcal == nil || r.BodyFatPct == nil {
+		t.Error("BMR and body fat should be populated after backfill")
+	}
+
+	// An empty-height profile clears the derived columns again.
+	if err := st.RederiveAll(settings.Profile{Name: "Test", Sex: "male"}); err != nil {
+		t.Fatalf("rederive (no height): %v", err)
+	}
+	if r, _ := st.Latest(); r == nil || r.BMI != nil {
+		t.Errorf("BMI should be cleared when height is unknown, got %+v", r)
+	}
+	_ = id
 }
 
 func TestDelete(t *testing.T) {

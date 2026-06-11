@@ -17,7 +17,7 @@ func TestRenderCard(t *testing.T) {
 	hr := 60
 
 	png, err := RenderCard(CardData{
-		ProfileName:  "Ansuman",
+		ProfileName:  "Sample",
 		Ts:           time.Date(2026, 6, 12, 8, 14, 0, 0, time.UTC),
 		WeightKg:     75.3,
 		BMI:          &bmi,
@@ -49,7 +49,7 @@ func TestRenderCard(t *testing.T) {
 
 func TestCaption_Renders(t *testing.T) {
 	cap := Caption(CardData{
-		ProfileName: "Ansuman",
+		ProfileName: "Sample",
 		Ts:          time.Date(2026, 6, 12, 8, 14, 0, 0, time.UTC),
 		WeightKg:    75.3,
 		Deltas:      []DeltaView{{Label: "vs last", Available: true, DeltaKg: -0.4}},

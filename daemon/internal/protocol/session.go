@@ -19,7 +19,7 @@ const (
 	// WeightLockFrames: identical weight frames in a row → weight is locked.
 	WeightLockFrames = 3
 	// HRLockFrames: identical heart-rate frames (body phase) → HR has converged.
-	HRLockFrames = 4
+	HRLockFrames = 3
 )
 
 // Update is a progress event emitted per clean frame, for logging/observability.
