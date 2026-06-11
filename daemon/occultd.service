@@ -1,0 +1,43 @@
+[Unit]
+Description=occultd — Bluetooth body-scale logger and dashboard
+After=bluetooth.target network.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+# Configuration (profile, Telegram, scale tuning) lives in the database and is
+# edited from the web UI — only the db path and listen address are flags.
+ExecStart=/usr/local/bin/occultd -db /var/lib/occultd/occult.db -addr :8765
+Restart=always
+RestartSec=5
+
+# Run as a dedicated system user that belongs to the 'bluetooth' group so it
+# can talk to BlueZ over D-Bus.  Create the user once with:
+#   useradd --system --no-create-home occultd
+#   usermod -aG bluetooth occultd
+#
+# Alternatively, if you prefer to run as your own login user (and you are
+# already in the bluetooth group), replace the two lines below with:
+#   User=<your-username>
+#   Group=<your-username>
+User=occultd
+Group=bluetooth
+
+# /var/lib/occultd is created and owned by the service user automatically.
+# Keep the -db path (above) inside this directory, or wherever the run user
+# has write access.
+StateDirectory=occultd
+
+# ---- Optional hardening -----------------------------------------------
+# These improve security but BlueZ + D-Bus can be sensitive to sandbox
+# restrictions.  Uncomment one at a time and test with `journalctl -u occultd`.
+#
+#NoNewPrivileges=true
+#ProtectSystem=strict
+#ProtectHome=true
+#PrivateTmp=true
+#ReadWritePaths=/var/lib/occultd /etc/occultd
+# -----------------------------------------------------------------------
+
+[Install]
+WantedBy=multi-user.target

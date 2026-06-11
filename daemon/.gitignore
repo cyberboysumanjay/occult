@@ -1,0 +1,13 @@
+# Compiled binary output
+bin/
+
+# Local config (keep config.example.toml, ignore the real one)
+config.toml
+
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+
+# OMC tooling state
+.omc/

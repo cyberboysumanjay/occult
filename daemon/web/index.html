@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>occult — body metrics</title>
+
+  <!-- Apply saved theme before first paint to avoid a flash -->
+  <script>try{var t=localStorage.getItem('occultd-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
+
+  <!-- No external CDN; Chart.js is vendored locally -->
+  <script src="./vendor/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<!-- film grain atmosphere -->
+<div class="grain" aria-hidden="true"></div>
+
+<!-- ── onboarding overlay (shown on first run, hidden after) ─────────── -->
+<div id="onboarding-overlay" class="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" hidden>
+  <div class="onboarding-panel">
+    <!-- rotating sigil (mirrors header) -->
+    <svg class="onboarding-sigil" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="50" cy="50" r="46" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 7"/>
+      <circle cx="50" cy="50" r="32" stroke="currentColor" stroke-width="0.8" stroke-dasharray="3 8"/>
+      <circle cx="50" cy="50" r="18" stroke="currentColor" stroke-width="0.6"/>
+      <line x1="50" y1="4"  x2="50" y2="96" stroke="currentColor" stroke-width="0.7" stroke-dasharray="3 6"/>
+      <line x1="4"  y1="50" x2="96" y2="50" stroke="currentColor" stroke-width="0.7" stroke-dasharray="3 6"/>
+      <line x1="18" y1="18" x2="82" y2="82" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 9"/>
+      <line x1="82" y1="18" x2="18" y2="82" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 9"/>
+      <circle cx="50" cy="50" r="3.5" fill="currentColor"/>
+    </svg>
+
+    <h2 id="onboarding-title" class="onboarding-title">occult</h2>
+    <p class="onboarding-tagline">know thyself — body metrics, locally owned</p>
+
+    <form id="onboarding-form" class="settings-form" novalidate>
+      <!-- Profile fields -->
+      <div class="form-group">
+        <label class="form-label" for="ob-name">Name</label>
+        <input id="ob-name" class="form-input" type="text" placeholder="Your name" autocomplete="name" required />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="ob-sex">Sex</label>
+          <select id="ob-sex" class="form-input form-select">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ob-age">Age</label>
+          <input id="ob-age" class="form-input" type="number" min="1" max="120" placeholder="e.g. 30" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ob-height">Height (cm)</label>
+          <input id="ob-height" class="form-input" type="number" min="1" max="300" placeholder="e.g. 170" required />
+        </div>
+      </div>
+
+      <!-- Telegram optional group (collapsed) -->
+      <details class="form-details">
+        <summary class="form-details-summary">Telegram (optional)</summary>
+        <div class="form-details-body">
+          <div class="form-group">
+            <label class="form-label" for="ob-bot-token">Bot token</label>
+            <input id="ob-bot-token" class="form-input" type="password" placeholder="123456:ABC-xyz…" autocomplete="off" />
+            <label class="reveal-toggle"><input type="checkbox" class="reveal-cb" data-target="ob-bot-token" /> show token</label>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="ob-chat-id">Chat ID</label>
+            <input id="ob-chat-id" class="form-input" type="text" placeholder="-100…" autocomplete="off" />
+          </div>
+        </div>
+      </details>
+
+      <div id="onboarding-error" class="form-error" hidden></div>
+
+      <button id="onboarding-submit" class="btn-primary" type="submit">Begin</button>
+    </form>
+  </div>
+</div>
+
+<!-- ── settings modal (accessible via gear button in header) ──────────── -->
+<div id="settings-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <div class="modal-panel">
+    <div class="modal-header">
+      <span id="settings-title" class="modal-title">Settings</span>
+      <button id="settings-close" class="modal-close-btn" aria-label="Close settings">✕</button>
+    </div>
+
+    <form id="settings-form" class="settings-form" novalidate>
+
+      <!-- ── Profile group ─────────────────────────────── -->
+      <div class="settings-group-label">Profile</div>
+      <div class="form-group">
+        <label class="form-label" for="st-name">Name</label>
+        <input id="st-name" class="form-input" type="text" placeholder="Your name" required />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" for="st-sex">Sex</label>
+          <select id="st-sex" class="form-input form-select">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="st-age">Age</label>
+          <input id="st-age" class="form-input" type="number" min="1" max="120" placeholder="e.g. 30" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="st-height">Height (cm)</label>
+          <input id="st-height" class="form-input" type="number" min="1" max="300" placeholder="e.g. 170" required />
+        </div>
+      </div>
+
+      <!-- ── Telegram group ────────────────────────────── -->
+      <div class="settings-group-label">Telegram</div>
+      <div class="form-group">
+        <label class="form-label" for="st-bot-token">Bot token</label>
+        <input id="st-bot-token" class="form-input" type="password" placeholder="123456:ABC-xyz…" autocomplete="off" />
+        <label class="reveal-toggle"><input type="checkbox" class="reveal-cb" data-target="st-bot-token" /> show token</label>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="st-chat-id">Chat ID</label>
+        <input id="st-chat-id" class="form-input" type="text" placeholder="-100…" autocomplete="off" />
+      </div>
+      <div class="form-inline-action">
+        <button id="st-tg-test" class="btn-secondary" type="button">Send test message</button>
+        <span id="st-tg-result" class="tg-result" aria-live="polite"></span>
+      </div>
+
+      <!-- ── Advanced group (collapsed) ───────────────── -->
+      <details class="form-details">
+        <summary class="form-details-summary settings-group-label" style="margin-top:0">Advanced</summary>
+        <div class="form-details-body">
+          <div class="form-group">
+            <label class="form-label" for="st-prefixes">Scale name prefixes <span class="form-hint">(comma-separated)</span></label>
+            <input id="st-prefixes" class="form-input" type="text" placeholder="Cult,CULT" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="st-rssi">RSSI threshold</label>
+              <input id="st-rssi" class="form-input" type="number" placeholder="-80" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="st-min-kg">Min weight (kg)</label>
+              <input id="st-min-kg" class="form-input" type="number" min="0" placeholder="5" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="st-max-kg">Max weight (kg)</label>
+              <input id="st-max-kg" class="form-input" type="number" min="0" placeholder="300" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="st-cooldown">Cooldown (s)</label>
+              <input id="st-cooldown" class="form-input" type="number" min="0" placeholder="20" />
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <div id="settings-error" class="form-error" hidden></div>
+
+      <div class="modal-footer">
+        <button id="settings-cancel" class="btn-secondary" type="button">Cancel</button>
+        <button id="settings-save" class="btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+
+    <!-- inline save confirmation toast -->
+    <div id="settings-toast" class="settings-toast" aria-live="polite" hidden>Saved.</div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ── header ─────────────────────────────────────────────────────── -->
+  <header>
+    <div class="brand">
+      <!-- rotating sigil -->
+      <svg class="brand-sigil" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="50" cy="50" r="46" stroke="currentColor" stroke-width="1.2" stroke-dasharray="5 7"/>
+        <circle cx="50" cy="50" r="32" stroke="currentColor" stroke-width="0.8" stroke-dasharray="3 8"/>
+        <circle cx="50" cy="50" r="18" stroke="currentColor" stroke-width="0.6"/>
+        <line x1="50" y1="4"  x2="50" y2="96" stroke="currentColor" stroke-width="0.7" stroke-dasharray="3 6"/>
+        <line x1="4"  y1="50" x2="96" y2="50" stroke="currentColor" stroke-width="0.7" stroke-dasharray="3 6"/>
+        <line x1="18" y1="18" x2="82" y2="82" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 9"/>
+        <line x1="82" y1="18" x2="18" y2="82" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 9"/>
+        <circle cx="50" cy="50" r="3.5" fill="currentColor"/>
+      </svg>
+      <div>
+        <h1>occult</h1>
+        <div class="brand-profile" id="profile-name">loading…</div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div id="live-dot" class="live-dot" title="Connection status"></div>
+      <span id="status-text" class="status-text">connecting…</span>
+      <button id="theme-btn" class="theme-btn" title="Toggle light/dark theme" aria-label="Toggle theme">◐</button>
+      <button id="settings-btn" class="theme-btn" title="Settings" aria-label="Open settings">⚙</button>
+    </div>
+  </header>
+
+  <!-- ── connecting banner ────────────────────────────────────────────── -->
+  <div id="connecting-banner" class="connecting-banner" role="status" aria-live="polite">
+    connecting to occultd — retrying every 30 s…
+  </div>
+
+  <!-- ── tab bar ──────────────────────────────────────────────────────── -->
+  <nav class="tab-bar" id="tab-bar" aria-label="Dashboard tabs">
+    <button class="tab-btn is-active" data-tab="today" aria-selected="true">Today</button>
+    <button class="tab-btn" data-tab="trends" aria-selected="false">Trends</button>
+    <button class="tab-btn" data-tab="history" aria-selected="false">History</button>
+    <span class="tab-underline" id="tab-underline" aria-hidden="true"></span>
+  </nav>
+
+  <!-- ── main content ─────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- TODAY panel -->
+    <section id="panel-today" class="tab-panel is-active" aria-label="Today">
+      <div id="today-hero" class="hero-card">
+        <div class="hero-empty-msg">
+          <div class="hero-big-text" style="color:var(--muted)">…</div>
+        </div>
+      </div>
+      <div id="today-grid" class="card-grid"></div>
+    </section>
+
+    <!-- TRENDS panel -->
+    <section id="panel-trends" class="tab-panel" aria-label="Trends">
+      <div id="trends-grid" class="trends-grid"></div>
+    </section>
+
+    <!-- HISTORY panel -->
+    <section id="panel-history" class="tab-panel" aria-label="History">
+      <div id="history-wrap" class="ledger-wrap"></div>
+    </section>
+
+  </main>
+
+  <!-- ── footer ──────────────────────────────────────────────────────── -->
+  <footer>
+    <span>occultd · body metrics daemon</span>
+    <span id="footer-refresh" class="footer-refresh">—</span>
+  </footer>
+
+</div><!-- .page -->
+
+<script src="./app.js"></script>
+</body>
+</html>
