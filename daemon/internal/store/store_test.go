@@ -117,7 +117,7 @@ func TestRederiveAll_BackfillsBodyComp(t *testing.T) {
 		t.Fatalf("BMI should be populated after backfill, got %+v", r)
 	}
 	if *r.BMI < 24 || *r.BMI > 28 { // 80 kg @ 1.75 m → ~26.1
-		t.Errorf("BMI = %v, expected ~31.9", *r.BMI)
+		t.Errorf("BMI = %v, expected ~26.1", *r.BMI)
 	}
 	if r.BMRKcal == nil || r.BodyFatPct == nil {
 		t.Error("BMR and body fat should be populated after backfill")

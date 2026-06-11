@@ -88,7 +88,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	var cfg settings.Settings
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&cfg); err != nil {
-		http.Error(w, `{"error":"bad json"}`, http.StatusBadRequest)
+		jsonError(w, http.StatusBadRequest, "bad json")
 		return
 	}
 	if err := s.store.SaveSettings(cfg); err != nil {
@@ -161,7 +161,7 @@ func (s *Server) handleReadings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
-		http.Error(w, `{"error":"bad id"}`, http.StatusBadRequest)
+		jsonError(w, http.StatusBadRequest, "bad id")
 		return
 	}
 	ok, err := s.store.Delete(id)
@@ -170,7 +170,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !ok {
-		http.Error(w, `{"error":"not found"}`, http.StatusNotFound)
+		jsonError(w, http.StatusNotFound, "not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -187,9 +187,18 @@ func writeJSON(w http.ResponseWriter, v any) {
 	}
 }
 
+// jsonError writes a {"error": msg} body with the JSON content type, so every
+// error response matches the rest of the API (http.Error would force text/plain).
+func jsonError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
 func httpError(w http.ResponseWriter, err error) {
 	log.Printf("api error: %v", err)
-	http.Error(w, `{"error":"internal"}`, http.StatusInternalServerError)
+	jsonError(w, http.StatusInternalServerError, "internal")
 }
 
 // logRequests is a tiny access log so journalctl shows dashboard hits.

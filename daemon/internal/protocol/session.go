@@ -38,7 +38,7 @@ type Complete struct {
 	WeightKg     float64
 	HeartRate    int    // 0 = none
 	ImpedanceRaw int    // 0 = none
-	Reason       string // "hr-stable" | "timeout" | "disconnect"
+	Reason       string // "hr-stable" | "idle" | "timeout" | "disconnect"
 }
 
 // Session accumulates frames for one weigh-in. Create one per session.

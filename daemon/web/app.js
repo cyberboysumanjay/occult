@@ -892,3 +892,12 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// Reveal/hide the (secret) bot-token fields — delegated so it covers both the
+// onboarding and settings inputs without per-element wiring.
+document.addEventListener('change', (e) => {
+  const cb = e.target.closest?.('.reveal-cb');
+  if (!cb) return;
+  const input = document.getElementById(cb.dataset.target);
+  if (input) input.type = cb.checked ? 'text' : 'password';
+});
