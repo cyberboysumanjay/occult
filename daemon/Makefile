@@ -33,10 +33,17 @@ test:
 run:
 	go run $(CMD) -db ./occult.db -addr :8765
 
-# Copies the locally built binary to /usr/local/bin (requires sudo).
+# Installs the locally built binary to /usr/local/bin (requires sudo).
+# Uses a temp file + atomic mv so it works even while the service is running
+# (a plain `cp` over a running binary fails with "Text file busy"). Restarts the
+# systemd service if it's installed.
 .PHONY: install
 install: build
-	sudo cp $(BIN_DIR)/$(BINARY) /usr/local/bin/$(BINARY)
+	sudo cp $(BIN_DIR)/$(BINARY) /usr/local/bin/$(BINARY).new
+	sudo mv -f /usr/local/bin/$(BINARY).new /usr/local/bin/$(BINARY)
+	@systemctl list-unit-files occultd.service >/dev/null 2>&1 && \
+		{ echo "restarting occultd.service"; sudo systemctl restart occultd; } || \
+		echo "binary installed (no occultd.service found — start it manually)"
 
 .PHONY: clean
 clean:
