@@ -41,7 +41,7 @@ const bmiTagClass = (b) => (b == null ? '' : b < 18.5 ? 'warn' : b < 25 ? 'good'
 
 // ── Today ──────────────────────────────────────────────────────────────────
 export function renderToday({ heroEl, gridEl, readings, profile }) {
-  const accent = profile?.color || '#d8a24a';
+  const accent = profile?.color || '#a06bff';
   heroEl.style.setProperty('--accent', accent);
 
   if (!profile) {
@@ -68,14 +68,6 @@ export function renderToday({ heroEl, gridEl, readings, profile }) {
   const prev = readings.length > 1 ? readings[readings.length - 2] : null;
 
   heroEl.innerHTML = `
-    <div class="hero-ring" aria-hidden="true">
-      <svg viewBox="0 0 200 200">
-        <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" stroke-width="0.6"/>
-        <circle cx="100" cy="100" r="70" fill="none" stroke="currentColor" stroke-width="0.4"/>
-        <path d="M100 14 L174 142 L26 142 Z" fill="none" stroke="currentColor" stroke-width="0.6"/>
-        <path d="M100 186 L26 58 L174 58 Z" fill="none" stroke="currentColor" stroke-width="0.4"/>
-      </svg>
-    </div>
     <div class="hero-eyebrow">Latest weigh-in · <span>${fmtRelative(latest.ts)}</span></div>
     <div class="hero-weight"><span id="heroWeightVal">0.0</span><span class="hero-unit">kg</span></div>
     <div id="heroDelta"></div>
@@ -116,10 +108,26 @@ export function renderToday({ heroEl, gridEl, readings, profile }) {
     metricCard('Lean mass', numVal(latest.ffmKg), 'kg', latest.ffmKg, prev?.ffmKg, { color: 'var(--c-lean)', higherIsBetter: true, sub: 'fat-free mass' }),
   ];
   gridEl.innerHTML = '';
-  cards.forEach((c, i) => {
-    c.style.animationDelay = `${i * 55}ms`;
-    gridEl.appendChild(c);
-  });
+  // bento placement: 4 stat tiles, then a 2×2 weight-trend chart tile, then the rest
+  cards.slice(0, 4).forEach((c, i) => { c.style.animationDelay = `${i * 55}ms`; gridEl.appendChild(c); });
+
+  if (readings.length >= 2) {
+    const chartTile = el('article', 'metric chart-tile');
+    chartTile.style.animationDelay = '220ms';
+    chartTile.innerHTML = `
+      <h3>Weight trend</h3>
+      <div class="now">${kg(latest.weightKg)}</div>
+      <div class="holder"><canvas></canvas></div>`;
+    gridEl.appendChild(chartTile);
+    lineChart(chartTile.querySelector('canvas'), {
+      labels: readings.map((r) => fmtDate(r.ts)),
+      values: readings.map((r) => r.weightKg),
+      color: '#ff6f5c',
+      unit: ' kg',
+    });
+  }
+
+  cards.slice(4).forEach((c, i) => { c.style.animationDelay = `${(i + 5) * 55}ms`; gridEl.appendChild(c); });
 }
 
 const pctVal = (v) => (v == null ? '—' : v.toFixed(1));
@@ -142,7 +150,7 @@ function metricCard(label, value, unit, curr, prev, opts = {}) {
 
 // ── Trends ───────────────────────────────────────────────────────────────────
 export function renderTrends({ gridEl, readings, profile }) {
-  const accent = profile?.color || '#d8a24a';
+  const accent = profile?.color || '#a06bff';
   if (readings.length < 2) {
     gridEl.innerHTML = `<div class="chart-card"><h3>Trends</h3><p class="metric-sub">Need at least two weigh-ins to chart a trend. Keep weighing in.</p></div>`;
     return;
@@ -152,9 +160,9 @@ export function renderTrends({ gridEl, readings, profile }) {
   gridEl.innerHTML = '';
 
   const series = [
-    { title: 'Weight', key: 'weightKg', unit: ' kg', color: accent, now: kg(latest.weightKg) },
-    { title: 'Body fat', key: 'bodyFatPct', unit: '%', color: '#d8a24a', now: pct(latest.bodyFatPct) },
-    { title: 'BMI', key: 'bmi', unit: '', color: '#cf9bd8', now: num(latest.bmi, 1) },
+    { title: 'Weight', key: 'weightKg', unit: ' kg', color: '#ff6f5c', now: kg(latest.weightKg) },
+    { title: 'Body fat', key: 'bodyFatPct', unit: '%', color: '#ff8a4c', now: pct(latest.bodyFatPct) },
+    { title: 'BMI', key: 'bmi', unit: '', color: '#a06bff', now: num(latest.bmi, 1) },
   ];
 
   for (const s of series) {
@@ -174,8 +182,8 @@ export function renderTrends({ gridEl, readings, profile }) {
   card.innerHTML = `<h3>Composition · latest</h3><div class="chart-now">${kg(latest.weightKg)}</div><div class="chart-holder tall"><canvas></canvas></div>`;
   gridEl.appendChild(card);
   const segs = [];
-  if (latest.fatMassKg != null) segs.push({ label: 'Fat', value: latest.fatMassKg, color: '#d8a24a' });
-  if (latest.ffmKg != null) segs.push({ label: 'Lean mass', value: latest.ffmKg, color: '#7cba8c' });
+  if (latest.fatMassKg != null) segs.push({ label: 'Fat', value: latest.fatMassKg, color: '#ff8a4c' });
+  if (latest.ffmKg != null) segs.push({ label: 'Lean mass', value: latest.ffmKg, color: '#5d8bff' });
   donut(card.querySelector('canvas'), segs);
 }
 

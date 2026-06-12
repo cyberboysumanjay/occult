@@ -92,7 +92,7 @@ function renderChips() {
   for (const p of state.profiles) {
     const b = document.createElement('button');
     b.className = 'chip' + (p.id === state.activeId ? ' is-active' : '');
-    b.style.setProperty('--accent', p.color || '#d8a24a');
+    b.style.setProperty('--accent', p.color || '#a06bff');
     b.textContent = (p.name || '?').charAt(0).toUpperCase();
     b.title = p.name;
     b.addEventListener('click', async () => { await setActiveProfileId(state.db, p.id); await refresh(); });

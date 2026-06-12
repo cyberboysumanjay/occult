@@ -349,10 +349,10 @@ function renderProfile(profile) {
 /** Apply Chart.js global defaults once. */
 function ensureChartTheme() {
   if (!window.Chart) return;
-  Chart.defaults.font.family = "'IBM Plex Mono', ui-monospace, monospace";
+  Chart.defaults.font.family = "'JetBrains Mono', ui-monospace, monospace";
   Chart.defaults.font.size   = 10;
-  Chart.defaults.color       = '#7e786c';
-  Chart.defaults.borderColor = 'rgba(236,228,211,0.08)';
+  Chart.defaults.color       = '#6e6b85';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
   Chart.defaults.plugins.legend.display  = false;
   Chart.defaults.animation.duration = 700;
   Chart.defaults.maintainAspectRatio = false;
@@ -387,7 +387,7 @@ function goldGradient(ctx, color) {
  * @param {HTMLCanvasElement} canvas
  * @param {object} opts  { id, labels, values, color, unit, spark }
  */
-function lineChart(canvas, { id, labels, values, color = '#d8a24a', unit = '', spark = false }) {
+function lineChart(canvas, { id, labels, values, color = '#a06bff', unit = '', spark = false }) {
   if (!window.Chart || !canvas) return;
   const ctx = canvas.getContext('2d');
   const instance = new Chart(ctx, {
@@ -411,11 +411,11 @@ function lineChart(canvas, { id, labels, values, color = '#d8a24a', unit = '', s
       responsive: true,
       plugins: {
         tooltip: spark ? { enabled: false } : {
-          backgroundColor: '#0e1014',
-          borderColor: 'rgba(236,228,211,0.16)',
+          backgroundColor: '#0d0d13',
+          borderColor: 'rgba(255,255,255,0.13)',
           borderWidth: 1,
-          titleColor: '#bdb6a6',
-          bodyColor: '#ECE4D3',
+          titleColor: '#b8b5cc',
+          bodyColor: '#f2f0ff',
           padding: 10,
           displayColors: false,
           callbacks: { label: c => `${c.formattedValue}${unit}` },
@@ -426,14 +426,14 @@ function lineChart(canvas, { id, labels, values, color = '#d8a24a', unit = '', s
         : {
             x: {
               grid: { display: false },
-              ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, color: '#7e786c',
-                       font: { family: "'IBM Plex Mono', monospace", size: 10 } },
-              border: { color: 'rgba(236,228,211,0.08)' },
+              ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, color: '#6e6b85',
+                       font: { family: "'JetBrains Mono', monospace", size: 10 } },
+              border: { color: 'rgba(255,255,255,0.07)' },
             },
             y: {
-              grid: { color: 'rgba(236,228,211,0.06)' },
-              ticks: { maxTicksLimit: 5, color: '#7e786c',
-                       font: { family: "'IBM Plex Mono', monospace", size: 10 } },
+              grid: { color: 'rgba(255,255,255,0.06)' },
+              ticks: { maxTicksLimit: 5, color: '#6e6b85',
+                       font: { family: "'JetBrains Mono', monospace", size: 10 } },
               border: { display: false },
             },
           },
@@ -460,22 +460,22 @@ function donutChart(canvas, id, segments) {
       datasets: [{
         data: segments.map(s => s.value),
         backgroundColor: segments.map(s => s.color),
-        borderColor: '#0a0b0d',
-        borderWidth: 3,
+        borderColor: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#08080c',
+        borderWidth: 4,
         hoverOffset: 6,
       }],
     },
     options: {
       responsive: true,
-      cutout: '68%',
+      cutout: '70%',
       plugins: {
         legend: {
           display: true, position: 'bottom',
-          labels: { boxWidth: 8, boxHeight: 8, padding: 12, usePointStyle: true, color: '#bdb6a6' },
+          labels: { boxWidth: 9, boxHeight: 9, padding: 14, usePointStyle: true, color: '#b8b5cc' },
         },
         tooltip: {
-          backgroundColor: '#0e1014', borderColor: 'rgba(236,228,211,0.16)', borderWidth: 1,
-          titleColor: '#bdb6a6', bodyColor: '#ECE4D3', padding: 10, displayColors: false,
+          backgroundColor: '#0d0d13', borderColor: 'rgba(255,255,255,0.13)', borderWidth: 1,
+          titleColor: '#b8b5cc', bodyColor: '#f2f0ff', padding: 10, displayColors: false,
           callbacks: { label: c => `${c.label}: ${(+c.formattedValue).toFixed(1)} kg` },
         },
       },
@@ -546,20 +546,8 @@ function renderToday(readings) {
   const latest = readings[readings.length - 1];
   const prev   = readings.length > 1 ? readings[readings.length - 2] : null;
 
-  // ── hero card ──
+  // ── hero tile (full-width) ──
   heroEl.innerHTML = `
-    <div class="hero-ornament" aria-hidden="true">
-      <svg viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="100" cy="100" r="96" stroke="currentColor" stroke-width="0.8" stroke-dasharray="4 6"/>
-        <circle cx="100" cy="100" r="72" stroke="currentColor" stroke-width="0.5" stroke-dasharray="2 8"/>
-        <circle cx="100" cy="100" r="48" stroke="currentColor" stroke-width="0.4"/>
-        <line x1="100" y1="4"   x2="100" y2="196" stroke="currentColor" stroke-width="0.4" stroke-dasharray="3 9"/>
-        <line x1="4"   y1="100" x2="196" y2="100" stroke="currentColor" stroke-width="0.4" stroke-dasharray="3 9"/>
-        <line x1="32"  y1="32"  x2="168" y2="168" stroke="currentColor" stroke-width="0.3" stroke-dasharray="2 10"/>
-        <line x1="168" y1="32"  x2="32"  y2="168" stroke="currentColor" stroke-width="0.3" stroke-dasharray="2 10"/>
-        <circle cx="100" cy="100" r="5" fill="currentColor" opacity="0.4"/>
-      </svg>
-    </div>
     <div class="hero-eyebrow">Latest weigh-in · <span>${fmtRelative(latest.ts)}</span></div>
     <div class="hero-weight-row">
       <span class="hero-weight" id="hero-weight-val">0.0</span>
@@ -588,12 +576,12 @@ function renderToday(readings) {
       id: 'hero-spark',
       labels: recent.map(() => ''),
       values: recent.map(r => r.weightKg),
-      color: '#d8a24a',
+      color: '#a06bff',
       spark: true,
     });
   }
 
-  // ── metric cards ──
+  // ── metric tiles ──
   const cards = [
     buildMetricCard(
       'Body fat', fmtNum1(latest.bodyFatPct), '%',
@@ -647,8 +635,32 @@ function renderToday(readings) {
   ];
 
   gridEl.innerHTML = '';
-  cards.forEach((card, i) => {
+  // bento placement: 4 stat tiles, then a 2×2 weight-trend chart tile, then the rest
+  cards.slice(0, 4).forEach((card, i) => {
     card.style.animationDelay = `${i * 55}ms`;
+    gridEl.appendChild(card);
+  });
+
+  if (readings.length >= 2) {
+    const chartTile = document.createElement('article');
+    chartTile.className = 'tile chart';
+    chartTile.style.animationDelay = '220ms';
+    chartTile.innerHTML = `
+      <h3>Weight trend</h3>
+      <div class="now">${fmtNum1(latest.weightKg)} kg</div>
+      <div class="holder"><canvas id="today-trend"></canvas></div>`;
+    gridEl.appendChild(chartTile);
+    lineChart(chartTile.querySelector('canvas'), {
+      id: 'today-trend',
+      labels: readings.map(r => fmtShortDate(r.ts)),
+      values: readings.map(r => r.weightKg),
+      color: '#ff6f5c',
+      unit: ' kg',
+    });
+  }
+
+  cards.slice(4).forEach((card, i) => {
+    card.style.animationDelay = `${(i + 5) * 55}ms`;
     gridEl.appendChild(card);
   });
 }
@@ -671,9 +683,9 @@ function renderTrends(readings) {
   gridEl.innerHTML = '';
 
   const series = [
-    { title: 'Weight',    key: 'weightKg',    unit: ' kg', color: '#d8a24a', now: fmtNum1(latest.weightKg) + ' kg',  id: 'chart-weight' },
-    { title: 'Body fat',  key: 'bodyFatPct',  unit: '%',   color: '#ec9054', now: fmtNum1(latest.bodyFatPct) + '%',  id: 'chart-fat'    },
-    { title: 'BMI',       key: 'bmi',         unit: '',    color: '#b98cf0', now: fmtNum1(latest.bmi),               id: 'chart-bmi'    },
+    { title: 'Weight',    key: 'weightKg',    unit: ' kg', color: '#ff6f5c', now: fmtNum1(latest.weightKg) + ' kg',  id: 'chart-weight' },
+    { title: 'Body fat',  key: 'bodyFatPct',  unit: '%',   color: '#ff8a4c', now: fmtNum1(latest.bodyFatPct) + '%',  id: 'chart-fat'    },
+    { title: 'BMI',       key: 'bmi',         unit: '',    color: '#a06bff', now: fmtNum1(latest.bmi),               id: 'chart-bmi'    },
   ];
 
   for (const s of series) {
@@ -695,8 +707,8 @@ function renderTrends(readings) {
 
   // composition donut
   const segs = [];
-  if (latest.fatMassKg != null) segs.push({ label: 'Fat',       value: latest.fatMassKg, color: '#d8a24a' });
-  if (latest.ffmKg     != null) segs.push({ label: 'Lean mass', value: latest.ffmKg,     color: '#7cba8c' });
+  if (latest.fatMassKg != null) segs.push({ label: 'Fat',       value: latest.fatMassKg, color: '#ff8a4c' });
+  if (latest.ffmKg     != null) segs.push({ label: 'Lean mass', value: latest.ffmKg,     color: '#5d8bff' });
 
   if (segs.length) {
     const donutCard = document.createElement('div');

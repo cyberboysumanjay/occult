@@ -9,10 +9,10 @@ let themed = false;
 function ensureTheme() {
   if (themed || !Chart) return;
   themed = true;
-  Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+  Chart.defaults.font.family = "'JetBrains Mono', monospace";
   Chart.defaults.font.size = 10;
-  Chart.defaults.color = '#7e786c';
-  Chart.defaults.borderColor = 'rgba(236,228,211,0.08)';
+  Chart.defaults.color = '#6e6b85';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
   Chart.defaults.plugins.legend.display = false;
   Chart.defaults.animation.duration = 700;
   Chart.defaults.maintainAspectRatio = false;
@@ -43,7 +43,7 @@ function hexA(hex, a) {
  * @param canvas  <canvas>
  * @param opts    { labels:string[], values:number[], color, unit, spark? }
  */
-export function lineChart(canvas, { labels, values, color = '#d8a24a', unit = '', spark = false }) {
+export function lineChart(canvas, { labels, values, color = '#a06bff', unit = '', spark = false }) {
   if (!Chart || !canvas) return;
   ensureTheme();
   reset(canvas);
@@ -68,11 +68,11 @@ export function lineChart(canvas, { labels, values, color = '#d8a24a', unit = ''
     options: {
       plugins: {
         tooltip: spark ? { enabled: false } : {
-          backgroundColor: '#0e1014',
-          borderColor: 'rgba(236,228,211,0.16)',
+          backgroundColor: '#0d0d13',
+          borderColor: 'rgba(255,255,255,0.13)',
           borderWidth: 1,
-          titleColor: '#bdb6a6',
-          bodyColor: '#ECE4D3',
+          titleColor: '#b8b5cc',
+          bodyColor: '#f2f0ff',
           padding: 10,
           displayColors: false,
           callbacks: { label: (c) => `${c.formattedValue}${unit}` },
@@ -82,7 +82,7 @@ export function lineChart(canvas, { labels, values, color = '#d8a24a', unit = ''
         ? { x: { display: false }, y: { display: false } }
         : {
             x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
-            y: { grid: { color: 'rgba(236,228,211,0.06)' }, ticks: { maxTicksLimit: 5 }, border: { display: false } },
+            y: { grid: { color: 'rgba(255,255,255,0.06)' }, ticks: { maxTicksLimit: 5 }, border: { display: false } },
           },
       interaction: { mode: 'index', intersect: false },
     },
@@ -106,18 +106,18 @@ export function donut(canvas, segments) {
       datasets: [{
         data: segments.map((s) => s.value),
         backgroundColor: segments.map((s) => s.color),
-        borderColor: '#0a0b0d',
-        borderWidth: 3,
+        borderColor: (getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#08080c'),
+        borderWidth: 4,
         hoverOffset: 6,
       }],
     },
     options: {
-      cutout: '68%',
+      cutout: '70%',
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { boxWidth: 8, boxHeight: 8, padding: 12, usePointStyle: true, color: '#bdb6a6' } },
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 9, boxHeight: 9, padding: 14, usePointStyle: true, color: '#b8b5cc' } },
         tooltip: {
-          backgroundColor: '#0e1014', borderColor: 'rgba(236,228,211,0.16)', borderWidth: 1,
-          titleColor: '#bdb6a6', bodyColor: '#ECE4D3', padding: 10, displayColors: false,
+          backgroundColor: '#0d0d13', borderColor: 'rgba(255,255,255,0.13)', borderWidth: 1,
+          titleColor: '#b8b5cc', bodyColor: '#f2f0ff', padding: 10, displayColors: false,
           callbacks: { label: (c) => `${c.label}: ${c.formattedValue} kg` },
         },
       },

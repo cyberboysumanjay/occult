@@ -1,11 +1,11 @@
 // occult service worker — cache-first app shell so the PWA is installable and
 // works offline. The fetch handler is also what makes Chrome offer "Install".
-const CACHE = 'occult-v2';
+const CACHE = 'occult-v3';
 
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './favicon.svg', './icon-192.png', './icon-512.png',
-  './vendor/chart.umd.min.js',
+  // Chart.js now loads from CDN; it is runtime-cached by the fetch handler below.
   './js/ble/uuids.js', './js/ble/parser.js', './js/ble/client.js',
   './js/data/schema.js', './js/data/db.js', './js/data/store.js', './js/data/export.js',
   './js/metrics/bodycomp.js',
