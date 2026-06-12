@@ -26,6 +26,9 @@ function deltaChip(curr, prev, { higherIsBetter = false, digits = 1, unit = '' }
 
 function countUp(node, to, { digits = 1, dur = 750 } = {}) {
   if (to == null) { node.textContent = '—'; return; }
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    node.textContent = (+to).toFixed(digits); return;
+  }
   const start = performance.now();
   const from = 0;
   function tick(t) {

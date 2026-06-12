@@ -142,6 +142,11 @@ function wireChrome() {
   for (const id of ['profileModal', 'manualModal']) {
     $(id).addEventListener('click', (e) => { if (e.target.id === id) $(id).hidden = true; });
   }
+  // dismiss the open form modal on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    for (const id of ['profileModal', 'manualModal']) { const m = $(id); if (m && !m.hidden) m.hidden = true; }
+  });
 }
 
 function positionUnderline() {

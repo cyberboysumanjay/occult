@@ -244,6 +244,7 @@ function initSettings() {
   $('settings-close').addEventListener('click', closeModal);
   $('settings-cancel').addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
 
   tgTestBtn.addEventListener('click', async () => {
     tgRes.textContent = '';
@@ -488,6 +489,9 @@ function donutChart(canvas, id, segments) {
 // ── count-up animation (mirrors PWA render.js) ───────────────────────────────
 function countUp(node, to, { digits = 1, dur = 750 } = {}) {
   if (to == null) { node.textContent = '—'; return; }
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    node.textContent = (+to).toFixed(digits); return;
+  }
   const start = performance.now();
   function tick(t) {
     const k     = Math.min(1, (t - start) / dur);

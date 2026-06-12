@@ -12,7 +12,7 @@
   --tile-2:    rgba(255,255,255,0.05);
   --ink:       #f2f0ff;
   --ink-2:     #b8b5cc;
-  --muted:     #6e6b85;
+  --muted:     #8f8ca8;
   --line:      rgba(255,255,255,0.07);
   --line-2:    rgba(255,255,255,0.13);
 
@@ -60,13 +60,13 @@
   --ink:       #16131f;
   --ink-2:     #4a4560;
   --muted:     #8884a0;
-  --line:      rgba(20,16,40,0.10);
-  --line-2:    rgba(20,16,40,0.16);
-  --violet:    #7a3dff;
+  --line:      rgba(20,16,40,0.14);
+  --line-2:    rgba(20,16,40,0.22);
+  --violet:    #6a2fe0;
   --violet-2:  #9a6bff;
-  --accent:    #7a3dff;
+  --accent:    #6a2fe0;
   --accent-glow: rgba(122,61,255,0.30);
-  --good: #1f9d6b; --warn: #c2871a; --bad: #d65a52;
+  --good: #0e6e45; --warn: #8a5e0e; --bad: #b83a32;
   --c-fat:#d9682f; --c-muscle:#1f9d6b; --c-water:#1f86c4; --c-bmi:#7a3dff;
   --c-energy:#bb8512; --c-hr:#d6437a; --c-mass:#d6533c; --c-lean:#3f5fd6;
   --shadow: 0 40px 90px -40px rgba(40,30,80,0.30);
@@ -418,4 +418,34 @@ details[open] > .form-details-summary::before { transform: rotate(90deg); }
   .hero-card { padding: 22px 18px; }
   .metric, .tile { padding: 15px; }
   table.ledger th.hide-sm, table.ledger td.hide-sm { display: none; }
+}
+
+/* ── accessibility & touch ──────────────────────────────────────────── */
+/* visible keyboard focus — :focus-visible keeps mouse clicks clean */
+:where(.theme-btn, .tab-btn, .btn-primary, .btn-secondary, .modal-close-btn,
+       .del-btn, .form-input, .form-select, .form-details-summary):focus-visible,
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--violet-2);
+  outline-offset: 2px;
+}
+.reveal-toggle input:focus-visible { outline: 2px solid var(--violet-2); outline-offset: 2px; }
+
+/* touch targets ≥ 44px (PWA-grade; harmless on desktop) */
+.theme-btn { width: 44px; height: 44px; }
+.modal-close-btn { width: 40px; height: 40px; }
+.tab-btn { min-height: 44px; }
+.del-btn { min-width: 44px; min-height: 44px; }
+
+/* iOS does not auto-zoom inputs at ≥16px */
+.form-input { font-size: 16px; }
+
+/* honor reduced-motion: drop entrance/loop animations, keep final state */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .tab-panel.is-active, .metric, .tile, .hero-card { opacity: 1 !important; transform: none !important; }
 }
